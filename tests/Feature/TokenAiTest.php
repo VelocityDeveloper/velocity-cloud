@@ -75,12 +75,13 @@ class TokenAiTest extends TestCase
         $this->actingAs(User::factory()->create())->post(route('layanan.topup', $s), ['token_juta' => 1])->assertNotFound();
     }
 
-    public function test_ubah_harga_token_tidak_menyentuh_landing_dan_sync_tidak_menonaktifkan(): void
+    public function test_ubah_harga_token_ditulis_ke_landing_dan_sync_tidak_menonaktifkan(): void
     {
         Queue::fake();
         $dir = sys_get_temp_dir().'/tokenai-'.uniqid();
         mkdir($dir);
-        file_put_contents("$dir/paket.json", json_encode(['vps' => [], 'managed' => []]));
+        file_put_contents("$dir/paket.json", json_encode(['vps' => [], 'managed' => [],
+            'ai' => [['slug' => 'ai-deepseek-v4-1-flash', 'nama' => 'DeepSeek V4.1 Flash', 'harga' => 5000]]]));
         file_put_contents("$dir/apps.json", '[]');
         config(['cloud.katalog_dir' => $dir]);
 
@@ -90,7 +91,8 @@ class TokenAiTest extends TestCase
 
         $this->actingAs(User::factory()->create(['is_admin' => true]))
             ->put(route('admin.paket.update', $plan), ['harga' => 6000, 'aktif' => true, 'stok' => null])->assertRedirect();
-        Queue::assertNotPushed(DeployLanding::class);
+        Queue::assertPushed(DeployLanding::class);
+        $this->assertSame(6000, json_decode(file_get_contents("$dir/paket.json"), true)['ai'][0]['harga']);
 
         $this->artisan('katalog:sync')->assertSuccessful();
         $this->assertSame([6000, true], [$plan->fresh()->harga, $plan->fresh()->aktif]);

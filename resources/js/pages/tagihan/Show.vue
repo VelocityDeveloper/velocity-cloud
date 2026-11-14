@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Head, Link } from "@inertiajs/vue3";
-import { QrCode } from "@lucide/vue";
+import { CreditCard, QrCode } from "@lucide/vue";
 import { computed, ref } from "vue";
 import PageHeader from "@/components/cloud/PageHeader.vue";
 import StatusBadge from "@/components/cloud/StatusBadge.vue";
@@ -32,6 +32,7 @@ const props = defineProps<{
     tagihan: Tagihan;
     layanan_id: number;
     metode_bayar: MetodeBayar[];
+    midtrans: boolean; // bayar online aktif (MIDTRANS_SERVER_KEY terisi)
 }>();
 defineOptions({
     layout: {
@@ -43,7 +44,7 @@ defineOptions({
 });
 
 const qris = ref<MetodeBayar | null>(null);
-// shortcut: pembayaran online (Duitku) belum dipasang; bayar manual ke metode di /admin/pembayaran, konfirmasi via WhatsApp, admin menandai lunas.
+// Bayar online = Midtrans Snap (lunas otomatis lewat notifikasi); bayar manual ke metode di /admin/pembayaran tetap ada, admin menandai lunas.
 // Konfirmasi bayar lewat tiket billing (pengganti WhatsApp); form tiket terisi otomatis.
 const konfirmasi = computed(() => {
     const q = new URLSearchParams({
@@ -130,6 +131,28 @@ const konfirmasi = computed(() => {
             class="h-fit rounded-lg border border-border bg-brand-50 p-5 lg:sticky lg:top-6"
         >
             <h2 class="font-semibold text-ink">Cara membayar</h2>
+            <template v-if="midtrans">
+                <Button as-child class="mt-3 w-full"
+                    ><Link
+                        :href="tagihanRoute.midtrans(tagihan.id)"
+                        method="post"
+                        as="button"
+                        ><CreditCard class="size-4" aria-hidden="true" /> Bayar
+                        online {{ rupiah(tagihan.total) }}</Link
+                    ></Button
+                >
+                <p class="mt-2 text-xs text-muted-foreground">
+                    Virtual account bank, QRIS, e-wallet, atau kartu lewat
+                    Midtrans. Layanan diproses otomatis setelah pembayaran
+                    berhasil, tanpa konfirmasi.
+                </p>
+                <p
+                    v-if="metode_bayar.length"
+                    class="mt-5 border-t border-border pt-4 text-sm font-medium text-ink"
+                >
+                    Atau transfer manual
+                </p>
+            </template>
             <template v-if="metode_bayar.length">
                 <div
                     class="mt-3 flex items-center justify-between gap-3 rounded-md border border-border bg-background px-4 py-3"
@@ -199,12 +222,16 @@ const konfirmasi = computed(() => {
                     diproses setelah dikonfirmasi.
                 </p>
             </template>
-            <p v-else class="mt-2 text-sm">
+            <p v-else-if="!midtrans" class="mt-2 text-sm">
                 Pembayaran online sedang kami siapkan. Untuk saat ini, buat
                 tiket billing dengan menyebut nomor tagihan. Layanan diproses
                 setelah pembayaran dikonfirmasi.
             </p>
-            <Button as-child class="mt-4"
+            <Button
+                v-if="metode_bayar.length || !midtrans"
+                as-child
+                :variant="midtrans ? 'outline' : 'default'"
+                class="mt-4"
                 ><Link :href="konfirmasi">{{
                     metode_bayar.length
                         ? "Konfirmasi pembayaran"

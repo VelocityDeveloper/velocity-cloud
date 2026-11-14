@@ -27,9 +27,11 @@ class HargaLanding
                 }
             }
         } else {
-            $kunci = $plan->kategori->value; // vps | managed
+            $kunci = $plan->kategori->value; // vps | managed | ai
+            $data[$kunci] ??= []; // tanpa ini foreach & mengubah salinan, bukan $data
             foreach ($data[$kunci] as &$p) {
-                if ($kunci.'-'.Str::slug($p['nama']) === $plan->slug) {
+                // ai menulis slug sendiri (Str::slug membuang titik: "V4.1" ≠ slug config "v4-1")
+                if (($p['slug'] ?? $kunci.'-'.Str::slug($p['nama'])) === $plan->slug) {
                     $p['harga'] = $harga;
                     $this->aktif($p, $aktif);
                     $ketemu = true;

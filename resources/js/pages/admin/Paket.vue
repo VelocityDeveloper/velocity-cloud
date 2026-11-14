@@ -32,6 +32,7 @@ type PaketRow = {
     stok: number | null;
     terpakai: number;
     bisa_dipesan: boolean;
+    spek: Record<string, string> | null;
     sumber: {
         url: string | null;
         model: string | null;
@@ -52,6 +53,7 @@ const props = defineProps<{
     analitik: LaporanToken | null;
 }>();
 const daftar = computed(() => props.paket);
+const adaSpek = computed(() => ['vps', 'managed'].includes(props.kategori.value));
 
 function status(p: PaketRow): { status: string; label: string } {
     if (!p.aktif) return { status: 'nonaktif', label: 'Nonaktif' };
@@ -187,6 +189,12 @@ function simpan() {
             <thead>
                 <tr>
                     <th>Nama</th>
+                    <template v-if="adaSpek">
+                        <th>CPU</th>
+                        <th>RAM</th>
+                        <th>Disk</th>
+                        <th v-if="kategori.value === 'vps'">Bandwidth</th>
+                    </template>
                     <th class="text-right">Harga/bulan</th>
                     <th class="text-right">Terpakai / stok</th>
                     <th>Status</th>
@@ -198,6 +206,14 @@ function simpan() {
             <tbody>
                 <tr v-for="p in daftar" :key="p.id">
                     <td class="font-semibold text-ink">{{ p.nama }}</td>
+                    <template v-if="adaSpek">
+                        <td>{{ p.spek?.cpu }}</td>
+                        <td>{{ p.spek?.ram }}</td>
+                        <td>{{ p.spek?.disk }}</td>
+                        <td v-if="kategori.value === 'vps'">
+                            {{ p.spek?.bandwidth }}
+                        </td>
+                    </template>
                     <td class="text-right tabular-nums">
                         {{
                             p.harga === null ? 'Hubungi kami' : rupiah(p.harga)

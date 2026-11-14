@@ -7,8 +7,10 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\Internal\AgenDiskusiController;
 use App\Http\Controllers\KatalogController;
 use App\Http\Controllers\LayananController;
+use App\Http\Controllers\MidtransController;
 use App\Http\Controllers\TagihanController;
 use App\Http\Controllers\TiketController;
+use Illuminate\Foundation\Http\Middleware\PreventRequestForgery;
 use Illuminate\Support\Facades\Route;
 
 Route::redirect('/', '/dashboard')->name('home');
@@ -55,6 +57,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     Route::get('tagihan', [TagihanController::class, 'index'])->name('tagihan.index');
     Route::get('tagihan/{invoice}', [TagihanController::class, 'show'])->name('tagihan.show');
+    Route::post('tagihan/{invoice}/midtrans', [MidtransController::class, 'bayar'])->middleware('throttle:10,1')->name('tagihan.midtrans');
 
     Route::middleware('can:admin')->prefix('admin')->name('admin.')->group(function () {
         Route::get('tagihan', [Admin\TagihanController::class, 'index'])->name('tagihan.index');
@@ -76,6 +79,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('pengguna', [Admin\PenggunaController::class, 'index'])->name('pengguna.index');
         Route::get('pembayaran', [Admin\PembayaranController::class, 'index'])->name('pembayaran.index');
         Route::post('pembayaran', [Admin\PembayaranController::class, 'store'])->name('pembayaran.store');
+        Route::post('pembayaran/midtrans', [Admin\PembayaranController::class, 'midtrans'])->name('pembayaran.midtrans');
         Route::post('pembayaran/{metode}', [Admin\PembayaranController::class, 'update'])->name('pembayaran.update');
         Route::delete('pembayaran/{metode}', [Admin\PembayaranController::class, 'destroy'])->name('pembayaran.destroy');
         Route::get('analitik', [Admin\AnalitikController::class, 'index'])->name('analitik.index');
@@ -84,5 +88,13 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::post('agen/{catatan}/putuskan', [Admin\AgenController::class, 'putuskan'])->name('agen.putuskan');
     });
 });
+
+// Lampiran chat tanpa login: diunduh WP-CLI/curl di layanan pelanggan lewat URL bertanda tangan (relatif, app di belakang tunnel)
+Route::get('chat-lampiran/{uuid}/{berkas}', [ChatController::class, 'lampiran'])->whereUuid('uuid')
+    ->where('berkas', '[A-Za-z0-9]{40}\\.[a-z0-9]{2,4}')->middleware(['signed:relative', 'throttle:120,1'])->name('chat.lampiran');
+
+// Notifikasi pembayaran Midtrans (Payment Notification URL di dashboard Midtrans); keaslian dicek tanda tangan + API status
+Route::post('midtrans/notifikasi', [MidtransController::class, 'notifikasi'])->middleware('throttle:120,1')
+    ->withoutMiddleware(PreventRequestForgery::class)->name('midtrans.notifikasi');
 
 require __DIR__.'/settings.php';

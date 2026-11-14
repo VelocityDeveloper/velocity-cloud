@@ -2,7 +2,6 @@
 
 namespace App\Actions\Katalog;
 
-use App\Enums\PlanKategori;
 use App\Jobs\DeployLanding;
 use App\Models\Plan;
 use App\Services\Katalog\HargaLanding;
@@ -15,8 +14,7 @@ class UbahPaket
     /** @return bool true jika situs ikut diperbarui */
     public function handle(Plan $plan, ?int $harga, bool $aktif, ?int $stok): bool
     {
-        // Token AI tidak tampil di landing: cukup DB.
-        $situsBerubah = $plan->kategori !== PlanKategori::Ai && ($plan->harga !== $harga || $plan->aktif !== $aktif);
+        $situsBerubah = $plan->harga !== $harga || $plan->aktif !== $aktif;
         if ($situsBerubah) {
             $this->landing->simpan($plan, $harga, $aktif); // tulis JSON dulu: gagal = DB tidak berubah
         }

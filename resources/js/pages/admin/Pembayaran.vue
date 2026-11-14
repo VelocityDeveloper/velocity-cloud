@@ -5,6 +5,7 @@ import PembayaranController from "@/actions/App/Http/Controllers/Admin/Pembayara
 import DataTable from "@/components/cloud/DataTable.vue";
 import PageHeader from "@/components/cloud/PageHeader.vue";
 import StatusBadge from "@/components/cloud/StatusBadge.vue";
+import TombolSalin from "@/components/cloud/TombolSalin.vue";
 import InputError from "@/components/InputError.vue";
 import { Button } from "@/components/ui/button";
 import {
@@ -36,7 +37,22 @@ defineOptions({
         breadcrumbs: [{ title: "Admin · Pembayaran", href: admin.pembayaran.index() }],
     },
 });
-const props = defineProps<{ metode: Metode[]; jenis: Record<Jenis, string> }>();
+type Midtrans = {
+    aktif: boolean;
+    produksi: boolean;
+    kunci_akhir: string | null; // 4 karakter akhir server key; null = belum diisi
+    url_notifikasi: string;
+};
+const props = defineProps<{ metode: Metode[]; jenis: Record<Jenis, string>; midtrans: Midtrans }>();
+
+// Server key tidak pernah dikirim balik ke browser: kosong = tetap pakai kunci lama
+const fm = useForm({ server_key: "", produksi: props.midtrans.produksi, aktif: props.midtrans.aktif });
+function simpanMidtrans() {
+    fm.post(PembayaranController.midtrans().url, {
+        preserveScroll: true,
+        onSuccess: () => fm.reset("server_key"),
+    });
+}
 
 const edit = ref<Partial<Metode> | null>(null);
 const pratinjau = ref<string | null>(null);
@@ -106,6 +122,61 @@ const labelNomor: Record<Jenis, string> = {
         >
             <Button @click="buka({})">Tambah Metode</Button>
         </PageHeader>
+        <section class="rounded-lg border border-border p-5" aria-labelledby="judul-midtrans">
+            <div class="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                    <h2 id="judul-midtrans" class="font-semibold text-ink">Midtrans (bayar online otomatis)</h2>
+                    <p class="mt-1 max-w-2xl text-sm text-muted-foreground">
+                        Pelanggan membayar lewat VA bank, QRIS, e-wallet, atau kartu. Tagihan lunas dan layanan dibuat otomatis
+                        setelah pembayaran berhasil, tanpa ditandai manual.
+                    </p>
+                </div>
+                <StatusBadge
+                    :status="midtrans.aktif ? 'aktif' : 'nonaktif'"
+                    :label="midtrans.aktif ? (midtrans.produksi ? 'Aktif · Produksi' : 'Aktif · Sandbox') : 'Nonaktif'"
+                />
+            </div>
+            <form class="mt-5 grid max-w-xl gap-4" @submit.prevent="simpanMidtrans">
+                <div class="grid gap-2">
+                    <Label for="server_key">Server Key</Label>
+                    <Input
+                        id="server_key"
+                        v-model="fm.server_key"
+                        type="password"
+                        autocomplete="off"
+                        maxlength="100"
+                        :placeholder="midtrans.kunci_akhir ? `Terisi (…${midtrans.kunci_akhir}), kosongkan bila tidak diganti` : 'SB-Mid-server-… atau Mid-server-…'"
+                    />
+                    <p class="text-xs text-muted-foreground">
+                        Dashboard Midtrans › Settings › Access Keys. Disimpan terenkripsi.
+                    </p>
+                    <InputError :message="fm.errors.server_key" />
+                </div>
+                <div class="flex items-center gap-2 text-sm">
+                    <input id="mt-produksi" v-model="fm.produksi" type="checkbox" />
+                    <Label for="mt-produksi">Mode produksi (transaksi uang sungguhan)</Label>
+                </div>
+                <div class="flex items-center gap-2 text-sm">
+                    <input id="mt-aktif" v-model="fm.aktif" type="checkbox" />
+                    <Label for="mt-aktif">Tampilkan tombol "Bayar online" di halaman tagihan</Label>
+                </div>
+                <div class="grid gap-2">
+                    <Label>Notification URL</Label>
+                    <div class="flex items-center gap-2 rounded-md border border-border bg-muted px-3 py-2">
+                        <code class="min-w-0 flex-1 truncate text-sm">{{ midtrans.url_notifikasi }}</code>
+                        <TombolSalin :teks="midtrans.url_notifikasi" label="Notification URL" />
+                    </div>
+                    <p class="text-xs text-muted-foreground">
+                        Tempel di Dashboard Midtrans › Settings › Payment › Notification URL. Tanpa ini tagihan tidak lunas otomatis.
+                    </p>
+                </div>
+                <div>
+                    <Button type="submit" :disabled="fm.processing">Simpan Midtrans</Button>
+                </div>
+            </form>
+        </section>
+
+        <h2 class="font-semibold text-ink">Transfer manual</h2>
         <DataTable
             :kosong="!metode.length"
             pesan-kosong="Belum ada metode. Pelanggan hanya melihat tombol konfirmasi via WhatsApp."

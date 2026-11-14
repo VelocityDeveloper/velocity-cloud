@@ -35,6 +35,7 @@ class PaketController extends Controller
                     'stok' => $p->stok,
                     'terpakai' => $p->terpakai,
                     'bisa_dipesan' => $p->bisaDipesan(),
+                    'spek' => $p->spek,
                     // API key tak pernah dikirim ke browser
                     'sumber' => $p->kategori === PlanKategori::Ai ? [
                         'url' => $p->sumber['url'] ?? null,

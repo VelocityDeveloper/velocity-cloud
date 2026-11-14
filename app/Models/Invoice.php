@@ -18,6 +18,7 @@ class Invoice extends Model
             'periode_selesai' => 'date',
             'jatuh_tempo' => 'date',
             'dibayar_pada' => 'datetime',
+            'midtrans' => 'array',
         ];
     }
 

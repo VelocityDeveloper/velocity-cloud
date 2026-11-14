@@ -4,10 +4,14 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\MetodeBayar;
+use App\Models\Pengaturan;
+use App\Services\Pembayaran\Midtrans;
+use Illuminate\Support\Facades\Crypt;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -18,7 +22,43 @@ class PembayaranController extends Controller
         return Inertia::render('admin/Pembayaran', [
             'metode' => MetodeBayar::orderBy('urutan')->orderBy('id')->get()->map->tampil(),
             'jenis' => MetodeBayar::JENIS,
+            'midtrans' => [
+                'aktif' => (bool) Pengaturan::ambil('midtrans.aktif', false),
+                'produksi' => Midtrans::produksi(),
+                // hanya 4 karakter akhir yang dikirim ke browser
+                'kunci_akhir' => ($k = Midtrans::kunci()) === '' ? null : substr($k, -4),
+                'url_notifikasi' => rtrim(config('app.url'), '/').route('midtrans.notifikasi', absolute: false),
+            ],
         ]);
+    }
+
+    /** Server key kosong = tetap pakai yang lama. */
+    public function midtrans(Request $request): RedirectResponse
+    {
+        $data = $request->validate([
+            'server_key' => ['nullable', 'string', 'max:100'],
+            'produksi' => ['boolean'],
+            'aktif' => ['boolean'],
+        ]);
+        $kunci = trim($data['server_key'] ?? '') ?: Midtrans::kunci();
+        $produksi = (bool) ($data['produksi'] ?? false);
+        if ($kunci !== '' && ! Midtrans::kunciCocokMode($kunci, $produksi)) {
+            throw ValidationException::withMessages(['server_key' => $produksi
+                ? 'Mode produksi butuh Server Key produksi (berawalan Mid-server-).'
+                : 'Mode sandbox butuh Server Key sandbox (berawalan SB-Mid-server-).']);
+        }
+        if (! empty($data['aktif']) && $kunci === '') {
+            throw ValidationException::withMessages(['server_key' => 'Isi Server Key sebelum mengaktifkan Midtrans.']);
+        }
+
+        if (filled($data['server_key'] ?? null)) {
+            Pengaturan::simpan('midtrans.server_key', Crypt::encryptString($kunci));
+        }
+        Pengaturan::simpan('midtrans.produksi', $produksi);
+        Pengaturan::simpan('midtrans.aktif', (bool) ($data['aktif'] ?? false));
+        Inertia::flash('toast', ['type' => 'success', 'message' => 'Pengaturan Midtrans disimpan.']);
+
+        return back();
     }
 
     public function store(Request $request): RedirectResponse

@@ -134,7 +134,6 @@ const kategori = [
                 <div class="p-4">
                     <dt class="text-sm text-muted-foreground">Saldo</dt>
                     <dd class="font-heading mt-1 text-2xl font-bold text-ink tabular-nums">{{ rupiah(saldo) }}</dd>
-                    <dd class="text-xs text-muted-foreground">Dari kode unik, tidak bisa ditarik</dd>
                 </div>
             </dl>
 

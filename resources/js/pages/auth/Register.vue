@@ -18,7 +18,7 @@ defineProps<{
 
 defineOptions({
     layout: {
-        title: 'Create an account',
+        title: '',
     },
 });
 </script>

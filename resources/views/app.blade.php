@@ -8,7 +8,7 @@
         <meta name="robots" content="noindex">
 
         <link rel="icon" href="/favicon.ico" sizes="any">
-        <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+        <link rel="icon" href="/favicon.png" type="image/png">
         <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 
         <link rel="preload" href="/fonts/PlusJakartaSans-400.woff2" as="font" type="font/woff2" crossorigin>

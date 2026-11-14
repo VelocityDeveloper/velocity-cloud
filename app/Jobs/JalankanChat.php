@@ -11,6 +11,7 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Storage;
 use Throwable;
 
 /**
@@ -29,6 +30,8 @@ class JalankanChat implements ShouldQueue
 
     public const BATAS_KONTEKS = 20; // pesan terakhir yang dikirim ke model, agar saldo tidak terkuras percakapan panjang
 
+    public const MIME_GAMBAR = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']; // dikirim ke model sebagai image_url (vision)
+
     public const BATAS_PUTARAN = 30; // putaran alat per pertanyaan (desain situs ±15–25), agar model tidak berputar tanpa akhir
 
     public const SISTEM = <<<'TXT'
@@ -38,6 +41,7 @@ class JalankanChat implements ShouldQueue
         - Untuk tindakan berisiko (hapus data, ganti sandi, update besar) jelaskan dampaknya dulu.
         - Managed Server dan layanan nonaktif belum bisa dikelola dari chat: arahkan ke menu Tiket.
         - Membuat/mendesain halaman atau tampilan WordPress: panggil panduan_desain_wp dulu lalu ikuti alurnya; jangan menulis HTML polos sebagai isi halaman.
+        - Lampiran pelanggan tertulis sebagai [Lampiran: nama (jenis, ukuran) URL]. Gambar (jpg/png/webp/gif) ikut terkirim sehingga isinya bisa Anda lihat; PDF dan video tidak, jangan menebak isinya. Untuk memakainya di WordPress unggah dengan WP-CLI `media import <URL> --title=<nama> --porcelain` (pakai URL utuh, termasuk ?signature=…), di VPS unduh dengan curl.
         - Jawab ringkas dalam bahasa pelanggan.
         TXT;
 
@@ -174,7 +178,7 @@ class JalankanChat implements ShouldQueue
         $res = Http::withToken($kunci)->withOptions(['stream' => true])->connectTimeout(15)->timeout(600)
             ->post(rtrim(config('cloud.chat_ai.endpoint'), '/').'/chat/completions', [
                 'model' => $model, 'stream' => true,
-                'messages' => $this->proses('konteks'), 'tools' => AlatLayanan::definisi(),
+                'messages' => self::denganGambar($this->proses('konteks')), 'tools' => AlatLayanan::definisi(),
             ]);
         if ($res->failed()) {
             throw new \DomainException($res->json('error.message') ?? "Gagal (HTTP {$res->status()}).");
@@ -228,6 +232,31 @@ class JalankanChat implements ShouldQueue
         ksort($panggilan);
 
         return ['teks' => $teks, 'nalar' => $nalar, 'panggilan' => array_values(array_filter($panggilan, fn ($c) => $c['function']['name'] !== ''))];
+    }
+
+    /** Ganti penanda image_url "lampiran:<path>" dengan data URL base64 dari disk local; berkas hilang → catatan teks. */
+    // shortcut: gambar dikirim ukuran asli (maks 10 MB lampiran) tiap putaran; perkecil dengan GD bila request jadi lambat.
+    public static function denganGambar(array $konteks): array
+    {
+        return array_map(function ($m) {
+            if (! is_array($m['content'] ?? null)) {
+                return $m;
+            }
+            $m['content'] = array_map(function ($b) {
+                $url = $b['image_url']['url'] ?? '';
+                if (! str_starts_with($url, 'lampiran:')) {
+                    return $b;
+                }
+                $path = substr($url, 9);
+                $disk = Storage::disk('local');
+
+                return $disk->exists($path)
+                    ? ['type' => 'image_url', 'image_url' => ['url' => 'data:'.$disk->mimeType($path).';base64,'.base64_encode($disk->get($path))]]
+                    : ['type' => 'text', 'text' => '[Gambar lampiran sudah tidak tersedia]'];
+            }, $m['content']);
+
+            return $m;
+        }, $konteks);
     }
 
     /** tool_calls pesan assistant terakhir di konteks yang belum punya balasan role=tool. */

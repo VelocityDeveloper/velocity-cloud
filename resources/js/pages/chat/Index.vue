@@ -1,33 +1,35 @@
 <script setup lang="ts">
-import { Head, Link, router } from '@inertiajs/vue3';
+import { Head, Link, router } from "@inertiajs/vue3";
 import {
     ArrowUp,
     Check,
     ChevronDown,
+    FileText,
     History,
+    Paperclip,
     RotateCcw,
     SquarePen,
     Square,
     Trash2,
     Wrench,
     X,
-} from '@lucide/vue';
-import { useLocalStorage } from '@vueuse/core';
-import MarkdownIt from 'markdown-it';
-import { computed, nextTick, onBeforeUnmount, ref } from 'vue';
-import ChatController from '@/actions/App/Http/Controllers/ChatController';
-import TombolSalin from '@/components/cloud/TombolSalin.vue';
-import { Button } from '@/components/ui/button';
+} from "@lucide/vue";
+import { useLocalStorage } from "@vueuse/core";
+import MarkdownIt from "markdown-it";
+import { computed, nextTick, onBeforeUnmount, ref } from "vue";
+import ChatController from "@/actions/App/Http/Controllers/ChatController";
+import TombolSalin from "@/components/cloud/TombolSalin.vue";
+import { Button } from "@/components/ui/button";
 import {
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
     DropdownMenuLabel,
     DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import { chat } from '@/routes';
-import katalog from '@/routes/katalog';
-import layanan from '@/routes/layanan';
+} from "@/components/ui/dropdown-menu";
+import { chat } from "@/routes";
+import katalog from "@/routes/katalog";
+import layanan from "@/routes/layanan";
 
 type Kunci = {
     id: number;
@@ -36,16 +38,19 @@ type Kunci = {
     model: string | null;
     saldo: number;
 };
-type Alat = { nama: string; ringkas: string; status: 'ok' | 'ditolak' };
+type Alat = { nama: string; ringkas: string; status: "ok" | "ditolak" };
+// url bertanda tangan dari server; kosong = salinan sementara sebelum terkirim
+type Lampiran = { nama: string; mime: string; ukuran: number; url?: string };
 type Pesan = {
-    role: 'user' | 'assistant';
+    role: "user" | "assistant";
     content: string;
+    lampiran?: Lampiran[];
     galat?: boolean;
     alat?: Alat[];
 };
 type Ringkas = { uuid: string; judul: string; status?: Status; waktu: string };
 // keadaan giliran AI di server (job JalankanChat); null = diam
-type Status = 'jalan' | 'menunggu' | 'stop' | null;
+type Status = "jalan" | "menunggu" | "stop" | null;
 type Keadaan = {
     status: Status;
     otomatis: boolean;
@@ -57,6 +62,7 @@ type Hasil = Keadaan & {
     akhir: Pesan;
     kunci?: Kunci[];
     percakapan?: Ringkas;
+    pengguna?: Pesan; // pesan user versi server (lampiran ber-URL)
 };
 
 const props = defineProps<{
@@ -71,7 +77,7 @@ const props = defineProps<{
         | null;
 }>();
 defineOptions({
-    layout: { breadcrumbs: [{ title: 'Chat AI', href: chat() }] },
+    layout: { breadcrumbs: [{ title: "Chat AI", href: chat() }] },
 });
 
 const kunciL = ref(props.kunci);
@@ -80,7 +86,7 @@ const uuid = ref(props.aktif?.uuid ?? null);
 const pesan = ref<Pesan[]>(props.aktif?.pesan ?? []);
 
 // model = layanan token AI; percakapan lama memakai modelnya sendiri, chat baru memakai pilihan terakhir
-const modelTerakhir = useLocalStorage<number | null>('chat-ai-layanan', null);
+const modelTerakhir = useLocalStorage<number | null>("chat-ai-layanan", null);
 const ada = (id: number | null | undefined) =>
     props.kunci.some((k) => k.id === id);
 const pilihId = ref<number | null>(
@@ -98,26 +104,47 @@ function pilihModel(id: number) {
     modelTerakhir.value = id;
 }
 
-const isi = ref('');
+const isi = ref("");
+// sama dengan aturan server (TiketController::LAMPIRAN_BERKAS): maks 3 berkas @10 MB, tanpa SVG/HTML
+const TERIMA =
+    "image/jpeg,image/png,image/webp,image/gif,application/pdf,video/mp4,video/webm,video/quicktime";
+const berkas = ref<File[]>([]);
+const pilihBerkasEl = ref<HTMLInputElement | null>(null);
+function tambahBerkas(e: Event) {
+    const el = e.target as HTMLInputElement;
+    const baru = [...(el.files ?? [])];
+    el.value = "";
+    const besar = baru.find((f) => f.size > 10 * 1024 * 1024);
+    galat.value = besar
+        ? `${besar.name} lebih dari 10 MB.`
+        : berkas.value.length + baru.length > 3
+          ? "Maksimal 3 lampiran per pesan."
+          : "";
+    if (!galat.value) berkas.value = [...berkas.value, ...baru];
+}
+const ukuran = (b: number) =>
+    b < 1024 * 1024
+        ? `${Math.ceil(b / 1024)} KB`
+        : `${(b / 1024 / 1024).toFixed(1)} MB`;
 const status = ref<Status>(props.aktif?.status ?? null);
 const otomatis = ref(props.aktif?.otomatis ?? false);
-const sedangAlat = ref(props.aktif?.sedang ?? '');
+const sedangAlat = ref(props.aktif?.sedang ?? "");
 const menunggu = ref(props.aktif?.menunggu ?? null);
 const sibuk = computed(() => status.value !== null);
 // teks indikator berkedip di pesan AI terakhir selama giliran berjalan di server
 const indikator = computed(() =>
-    status.value !== 'jalan'
-        ? ''
+    status.value !== "jalan"
+        ? ""
         : sedangAlat.value
           ? `Menjalankan: ${sedangAlat.value}`
           : pesan.value.at(-1)?.content
-            ? 'Sedang menulis'
-            : 'Sedang berpikir',
+            ? "Sedang menulis"
+            : "Sedang berpikir",
 );
 // status di riwayat: percakapan yang sedang dibuka memakai status langsung
 const statusRiwayat = (r: Ringkas) =>
     r.uuid === uuid.value ? status.value : (r.status ?? null);
-const galat = ref(''); // galat kirim/izin (mis. 409, saldo)
+const galat = ref(""); // galat kirim/izin (mis. 409, saldo)
 const putus = ref(false); // pemantauan status gagal, sedang mencoba lagi
 const riwayatTerbuka = ref(false); // panel riwayat di layar kecil
 const daftarEl = ref<HTMLElement | null>(null);
@@ -135,20 +162,22 @@ onBeforeUnmount(() => {
 });
 
 const headerJson = () => ({
-    'content-type': 'application/json',
-    accept: 'application/json',
-    'x-xsrf-token': decodeURIComponent(
-        document.cookie.match(/(?:^|; )XSRF-TOKEN=([^;]*)/)?.[1] ?? '',
+    "content-type": "application/json",
+    accept: "application/json",
+    "x-xsrf-token": decodeURIComponent(
+        document.cookie.match(/(?:^|; )XSRF-TOKEN=([^;]*)/)?.[1] ?? "",
     ),
-    'x-requested-with': 'XMLHttpRequest',
+    "x-requested-with": "XMLHttpRequest",
 });
 
 /** Kirim ke server; galat HTTP dilempar dengan pesan dari server. */
 async function api(url: string, body?: object): Promise<Hasil> {
+    const form = body instanceof FormData; // multipart: browser yang mengisi content-type + boundary
+    const { "content-type": _, ...tanpaJenis } = headerJson();
     const res = await fetch(url, {
-        method: body ? 'POST' : 'GET',
-        headers: headerJson(),
-        body: body ? JSON.stringify(body) : undefined,
+        method: body ? "POST" : "GET",
+        headers: form ? tanpaJenis : headerJson(),
+        body: form ? body : body ? JSON.stringify(body) : undefined,
     });
     const j = await res.json().catch(() => null);
     if (!res.ok) throw new Error(j?.message || `Gagal (HTTP ${res.status}).`);
@@ -158,7 +187,7 @@ async function api(url: string, body?: object): Promise<Hasil> {
 function terapkan(j: Hasil) {
     status.value = j.status;
     otomatis.value = j.otomatis;
-    sedangAlat.value = j.sedang ?? '';
+    sedangAlat.value = j.sedang ?? "";
     menunggu.value = j.menunggu;
     // server hanya menambah/mengubah pesan terakhir giliran ini
     pesan.value = [...pesan.value.slice(0, j.jumlah - 1), j.akhir];
@@ -168,7 +197,7 @@ function terapkan(j: Hasil) {
 
 function pantau(jeda = 1000) {
     clearTimeout(pemantau);
-    if (!hidup || !uuid.value || !['jalan', 'stop'].includes(status.value!))
+    if (!hidup || !uuid.value || !["jalan", "stop"].includes(status.value!))
         return;
     const id = uuid.value;
     pemantau = setTimeout(async () => {
@@ -186,20 +215,26 @@ function pantau(jeda = 1000) {
 }
 pantau(0); // percakapan dibuka saat AI masih berjalan
 
-async function mulai(riwayat: Pesan[], body: object) {
-    galat.value = '';
+async function mulai(
+    riwayat: Pesan[],
+    body: Record<string, string>,
+    lampiran: File[] = [],
+) {
+    galat.value = "";
     const id = (uuid.value ??= crypto.randomUUID());
     const sebelum = pesan.value;
-    pesan.value = [...riwayat, { role: 'assistant', content: '' }];
-    status.value = 'jalan';
+    pesan.value = [...riwayat, { role: "assistant", content: "" }];
+    status.value = "jalan";
     gulir();
     try {
-        const j = await api(ChatController.kirim(id).url, {
-            service_id: pilihId.value,
-            ...body,
-        });
+        const fd = new FormData();
+        fd.append("service_id", String(pilihId.value));
+        Object.entries(body).forEach(([k, v]) => fd.append(k, v));
+        lampiran.forEach((f) => fd.append("lampiran[]", f));
+        const j = await api(ChatController.kirim(id).url, fd);
         if (!hidup) return;
         terapkan(j);
+        if (j.pengguna) pesan.value[j.jumlah - 2] = j.pengguna;
         daftarL.value = [
             j.percakapan!,
             ...daftarL.value.filter((d) => d.uuid !== id),
@@ -228,22 +263,37 @@ async function mulai(riwayat: Pesan[], body: object) {
     } catch (e) {
         pesan.value = sebelum;
         status.value = null;
-        galat.value = e instanceof Error ? e.message : 'Gagal mengirim.';
+        galat.value = e instanceof Error ? e.message : "Gagal mengirim.";
     }
 }
 
 function kirim() {
     const teks = isi.value.trim();
-    if (!aktif.value || !teks || sibuk.value) return;
-    isi.value = '';
+    const lampiran = berkas.value;
+    if (!aktif.value || (!teks && !lampiran.length) || sibuk.value) return;
+    isi.value = "";
+    berkas.value = [];
     mulai(
         [
             ...pesan.value.filter((p) => !p.galat),
-            { role: 'user', content: teks },
+            {
+                role: "user",
+                content: teks,
+                ...(lampiran.length && {
+                    lampiran: lampiran.map((f) => ({
+                        nama: f.name,
+                        mime: f.type,
+                        ukuran: f.size,
+                    })),
+                }),
+            },
         ],
         { teks },
+        lampiran,
     ).then(() => {
-        if (galat.value) isi.value ||= teks; // gagal terkirim: teks dikembalikan
+        if (!galat.value) return;
+        isi.value ||= teks; // gagal terkirim: teks & lampiran dikembalikan
+        if (!berkas.value.length) berkas.value = lampiran;
     });
 }
 
@@ -251,16 +301,16 @@ function kirim() {
 function ulangi() {
     if (sibuk.value || !aktif.value) return;
     const riwayat = pesan.value.filter((p) => !p.galat);
-    if (riwayat.at(-1)?.role === 'user') mulai(riwayat, { ulang: true });
+    if (riwayat.at(-1)?.role === "user") mulai(riwayat, { ulang: "1" });
 }
 
 async function aksi(url: string, body?: object) {
-    galat.value = '';
+    galat.value = "";
     try {
         terapkan(await api(url, body ?? {}));
         pantau(300);
     } catch (e) {
-        galat.value = e instanceof Error ? e.message : 'Gagal.';
+        galat.value = e instanceof Error ? e.message : "Gagal.";
     }
 }
 const izin = (jalankan: boolean, sesi = false) =>
@@ -270,7 +320,7 @@ const cabutOtomatis = () =>
     aksi(ChatController.otomatis(uuid.value!).url, { nyala: false });
 
 function tombol(e: KeyboardEvent) {
-    if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
+    if (e.key === "Enter" && !e.shiftKey && !e.isComposing) {
         e.preventDefault();
         kirim();
     }
@@ -294,12 +344,12 @@ const kelompok = computed(() => {
     const nama = (w: string) => {
         const t = new Date(w).getTime();
         return t >= awal.getTime()
-            ? 'Hari ini'
+            ? "Hari ini"
             : t >= awal.getTime() - 864e5
-              ? 'Kemarin'
+              ? "Kemarin"
               : t >= awal.getTime() - 7 * 864e5
-                ? '7 hari terakhir'
-                : 'Lebih lama';
+                ? "7 hari terakhir"
+                : "Lebih lama";
     };
     const g: { nama: string; isi: Ringkas[] }[] = [];
     for (const r of daftarL.value) {
@@ -309,7 +359,7 @@ const kelompok = computed(() => {
     }
     return g;
 });
-const angka = (n: number) => n.toLocaleString('id-ID');
+const angka = (n: number) => n.toLocaleString("id-ID");
 
 // Jawaban AI berformat markdown. html:false = tag HTML dari model di-escape, aman untuk v-html.
 const md = new MarkdownIt({ html: false, linkify: true, breaks: true });
@@ -317,8 +367,8 @@ const linkAsli =
     md.renderer.rules.link_open ??
     ((t, i, o, _e, self) => self.renderToken(t, i, o));
 md.renderer.rules.link_open = (t, i, o, e, self) => {
-    t[i].attrSet('target', '_blank');
-    t[i].attrSet('rel', 'noopener noreferrer');
+    t[i].attrSet("target", "_blank");
+    t[i].attrSet("rel", "noopener noreferrer");
     return linkAsli(t, i, o, e, self);
 };
 </script>
@@ -429,7 +479,7 @@ md.renderer.rules.link_open = (t, i, o, e, self) => {
                             class="gap-1 text-base font-semibold"
                             :disabled="sibuk"
                         >
-                            {{ aktif?.nama ?? 'Pilih model'
+                            {{ aktif?.nama ?? "Pilih model"
                             }}<ChevronDown
                                 class="size-4 text-muted-foreground"
                                 aria-hidden="true"
@@ -521,9 +571,66 @@ md.renderer.rules.link_open = (t, i, o, e, self) => {
                         >
                             <div
                                 v-if="p.role === 'user'"
-                                class="max-w-[80%] rounded-3xl bg-muted px-5 py-2.5 text-sm break-words whitespace-pre-wrap"
+                                class="flex max-w-[80%] flex-col items-end gap-2"
                             >
-                                {{ p.content }}
+                                <ul
+                                    v-if="p.lampiran?.length"
+                                    class="flex flex-wrap justify-end gap-2"
+                                    aria-label="Lampiran"
+                                >
+                                    <li v-for="(l, j) in p.lampiran" :key="j">
+                                        <component
+                                            :is="l.url ? 'a' : 'span'"
+                                            :href="l.url"
+                                            target="_blank"
+                                            rel="noopener"
+                                            class="flex items-center gap-2 overflow-hidden rounded-xl border bg-background text-xs"
+                                            :class="{
+                                                'pr-3':
+                                                    !l.url ||
+                                                    !l.mime.startsWith(
+                                                        'image/',
+                                                    ),
+                                            }"
+                                        >
+                                            <img
+                                                v-if="
+                                                    l.url &&
+                                                    l.mime.startsWith('image/')
+                                                "
+                                                :src="l.url"
+                                                :alt="l.nama"
+                                                class="size-24 object-cover"
+                                            />
+                                            <template v-else>
+                                                <span
+                                                    class="flex size-10 items-center justify-center bg-muted"
+                                                >
+                                                    <FileText
+                                                        class="size-4"
+                                                        aria-hidden="true"
+                                                    />
+                                                </span>
+                                                <span
+                                                    class="max-w-40 truncate"
+                                                    >{{ l.nama }}</span
+                                                >
+                                                <span
+                                                    class="text-muted-foreground"
+                                                    >{{
+                                                        ukuran(l.ukuran)
+                                                    }}</span
+                                                >
+                                            </template>
+                                        </component>
+                                    </li>
+                                </ul>
+                                <div
+                                    v-if="p.content"
+                                    class="rounded-3xl bg-muted px-5 py-2.5 text-sm break-words whitespace-pre-wrap"
+                                >
+                                    {{ p.content }}
+                                </div>
                             </div>
                             <div
                                 v-else
@@ -685,17 +792,56 @@ md.renderer.rules.link_open = (t, i, o, e, self) => {
                         Koneksi terputus, mencoba lagi… AI tetap berjalan di
                         server.
                     </p>
-                    <p
-                        v-else-if="sibuk"
-                        class="mb-2 text-xs text-muted-foreground"
+                    <ul
+                        v-if="berkas.length"
+                        class="mb-2 flex flex-wrap gap-2"
+                        aria-label="Lampiran yang akan dikirim"
                     >
-                        AI berjalan di server: aman pindah halaman atau menutup
-                        tab, hasilnya tersimpan di riwayat.
-                    </p>
+                        <li
+                            v-for="(f, j) in berkas"
+                            :key="j"
+                            class="flex items-center gap-2 rounded-full border bg-background py-1 pr-1 pl-3 text-xs"
+                        >
+                            <span class="max-w-48 truncate">{{ f.name }}</span>
+                            <span class="text-muted-foreground">{{
+                                ukuran(f.size)
+                            }}</span>
+                            <button
+                                type="button"
+                                class="rounded-full p-1 hover:bg-muted"
+                                :aria-label="`Hapus lampiran ${f.name}`"
+                                @click="
+                                    berkas = berkas.filter((_, k) => k !== j)
+                                "
+                            >
+                                <X class="size-3.5" />
+                            </button>
+                        </li>
+                    </ul>
                     <form
-                        class="flex items-end gap-2 rounded-3xl border bg-background p-2 pl-4 shadow-sm focus-within:ring-2 focus-within:ring-ring"
+                        class="flex items-end gap-2 rounded-3xl border bg-background p-2 shadow-sm focus-within:ring-2 focus-within:ring-ring"
                         @submit.prevent="kirim"
                     >
+                        <input
+                            ref="pilihBerkasEl"
+                            type="file"
+                            multiple
+                            :accept="TERIMA"
+                            class="hidden"
+                            @change="tambahBerkas"
+                        />
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            class="shrink-0 rounded-full"
+                            aria-label="Lampirkan gambar, PDF, atau video"
+                            title="Lampirkan gambar, PDF, atau video (maks 3 × 10 MB)"
+                            :disabled="!aktif || sibuk || berkas.length >= 3"
+                            @click="pilihBerkasEl?.click()"
+                        >
+                            <Paperclip class="size-4" />
+                        </Button>
                         <label for="isi-chat" class="sr-only">Pesan</label>
                         <textarea
                             id="isi-chat"
@@ -728,7 +874,9 @@ md.renderer.rules.link_open = (t, i, o, e, self) => {
                             class="rounded-full"
                             aria-label="Kirim"
                             :disabled="
-                                !isi.trim() || !aktif || aktif.saldo <= 0
+                                (!isi.trim() && !berkas.length) ||
+                                !aktif ||
+                                aktif.saldo <= 0
                             "
                         >
                             <ArrowUp class="size-4" />

@@ -11,7 +11,9 @@ use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Crypt;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Tests\TestCase;
 
@@ -147,6 +149,45 @@ class ChatJalanTest extends TestCase
         $this->kirim($uuid, 'Hai')->assertJsonPath('akhir', ['role' => 'assistant', 'content' => 'Saldo token habis.', 'galat' => true]);
         $this->actingAs($this->user)->postJson("/chat/$uuid/kirim", ['service_id' => $this->ai->id, 'ulang' => true])
             ->assertJsonPath('jumlah', 2)->assertJsonPath('akhir.content', 'Oke.');
+    }
+
+    public function test_lampiran_disimpan_url_bertanda_tangan_ke_model_dan_dihapus_bersama_percakapan(): void
+    {
+        Storage::fake('local');
+        $this->model(self::sse(['content' => 'Siap.']));
+        $uuid = (string) Str::uuid();
+
+        $res = $this->actingAs($this->user)->post("/chat/$uuid/kirim", ['service_id' => $this->ai->id,
+            'lampiran' => [UploadedFile::fake()->image('logo.png', 40, 40)]], ['Accept' => 'application/json'])
+            ->assertOk()->assertJsonPath('percakapan.judul', 'logo.png')->assertJsonPath('pengguna.lampiran.0.nama', 'logo.png');
+
+        $url = $res->json('pengguna.lampiran.0.url');
+        $this->assertStringStartsWith("/chat-lampiran/$uuid/", $url);
+        // gambar: teks berisi URL + image_url data base64 (vision); DB hanya menyimpan penanda lampiran:
+        Http::assertSent(function (Request $r) use ($url) {
+            [$teks, $gambar] = end($r->data()['messages'])['content'];
+
+            return str_contains($teks['text'], '[Lampiran: logo.png (image/png, ') && str_contains($teks['text'], rtrim(config('app.url'), '/').$url)
+                && str_starts_with($gambar['image_url']['url'], 'data:image/png;base64,iVBOR');
+        });
+        $this->assertStringNotContainsString('base64', json_encode(ChatPercakapan::where('uuid', $uuid)->first()->toArray()));
+
+        auth()->logout();
+        $this->get($url)->assertOk()->assertHeader('X-Content-Type-Options', 'nosniff'); // tanpa login (WP-CLI di pod)
+        $this->get(strtok($url, '?'))->assertForbidden(); // tanpa tanda tangan
+        $this->get(str_replace('signature=', 'signature=0', $url))->assertForbidden();
+
+        $this->actingAs($this->user)->delete("/chat/$uuid")->assertRedirect();
+        $this->assertSame([], Storage::disk('local')->allFiles("chat/$uuid"));
+        $this->get($url)->assertNotFound();
+    }
+
+    public function test_lampiran_jenis_berbahaya_ditolak(): void
+    {
+        Storage::fake('local');
+        $this->actingAs($this->user)->post('/chat/'.Str::uuid().'/kirim', ['service_id' => $this->ai->id,
+            'lampiran' => [UploadedFile::fake()->createWithContent('x.svg', '<svg onload="alert(1)"/>')]], ['Accept' => 'application/json'])
+            ->assertStatus(422)->assertJsonValidationErrors('lampiran.0');
     }
 
     public function test_model_milik_orang_lain_ditolak(): void

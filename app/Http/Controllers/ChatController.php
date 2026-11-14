@@ -11,9 +11,12 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\URL;
 use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /** Chat AI pelanggan: giliran AI berjalan di server (job JalankanChat), browser memantau status; aman pindah halaman. */
 class ChatController extends Controller
@@ -35,8 +38,10 @@ class ChatController extends Controller
     {
         $data = $request->validate([
             'service_id' => ['required', 'integer'],
-            'teks' => ['required_unless:ulang,true', 'nullable', 'string', 'max:20000'],
+            'teks' => ['required_without_all:ulang,lampiran', 'nullable', 'string', 'max:20000'],
             'ulang' => ['sometimes', 'boolean'],
+            'lampiran' => TiketController::LAMPIRAN,
+            'lampiran.*' => TiketController::LAMPIRAN_BERKAS,
         ]);
         $p = ChatPercakapan::firstWhere('uuid', $uuid);
         abort_if($p && $p->user_id !== $request->user()->id, 404);
@@ -46,24 +51,73 @@ class ChatController extends Controller
 
         $riwayat = array_values(array_filter($p->pesan ?? [], fn ($m) => empty($m['galat'])));
         if (empty($data['ulang'])) {
-            $riwayat[] = ['role' => 'user', 'content' => trim($data['teks'])];
+            $riwayat[] = ['role' => 'user', 'content' => trim($data['teks'] ?? '')]
+                + ($request->hasFile('lampiran') ? ['lampiran' => $this->simpanLampiran($request, $uuid)] : []);
         }
         abort_unless((end($riwayat)['role'] ?? null) === 'user', 422, 'Tidak ada pesan untuk dikirim.');
 
         $p ??= new ChatPercakapan(['uuid' => $uuid, 'user_id' => $request->user()->id]);
         $p->fill([
             'service_id' => $data['service_id'],
-            'judul' => Str::limit(preg_replace('/\s+/', ' ', collect($riwayat)->firstWhere('role', 'user')['content']), 60, ''),
+            'judul' => Str::limit(preg_replace('/\s+/', ' ', ($u = collect($riwayat)->firstWhere('role', 'user'))['content'] ?: ($u['lampiran'][0]['nama'] ?? '')), 60, ''),
             'pesan' => [...array_slice($riwayat, -200), ['role' => 'assistant', 'content' => '']],
             'status' => 'jalan',
             'proses' => ['putaran' => 0, 'konteks' => [
                 ['role' => 'system', 'content' => JalankanChat::SISTEM],
-                ...array_map(fn ($m) => ['role' => $m['role'], 'content' => $m['content']], array_slice($riwayat, -JalankanChat::BATAS_KONTEKS)),
+                ...array_map(fn ($m) => ['role' => $m['role'], 'content' => self::isiModel($m)], array_slice($riwayat, -JalankanChat::BATAS_KONTEKS)),
             ]],
         ])->save();
         JalankanChat::dispatch($p->id);
 
-        return response()->json($this->data($request, $p->fresh()) + ['percakapan' => self::ringkas($p->fresh())]);
+        // pengguna = pesan user dari server (lampiran sudah ber-URL) untuk mengganti salinan sementara di browser
+        return response()->json($this->data($request, $p->fresh()) + ['percakapan' => self::ringkas($p->fresh()), 'pengguna' => end($riwayat)]);
+    }
+
+    /** Simpan lampiran ke disk local chat/{uuid}; URL bertanda tangan (tanpa login) agar WP-CLI/curl di layanan bisa mengunduhnya. */
+    private function simpanLampiran(Request $request, string $uuid): array
+    {
+        return array_map(function ($f) use ($uuid) {
+            $berkas = basename($f->store("chat/$uuid", 'local'));
+
+            return [
+                'nama' => Str::limit($f->getClientOriginalName(), 120, ''),
+                'mime' => $f->getMimeType(),
+                'ukuran' => $f->getSize(),
+                // relatif: app di belakang tunnel (skema http di server), tanda tangan dicek tanpa skema/host
+                'url' => URL::signedRoute('chat.lampiran', ['uuid' => $uuid, 'berkas' => $berkas], absolute: false),
+            ];
+        }, $request->file('lampiran'));
+    }
+
+    /**
+     * Isi pesan untuk model: lampiran ditulis sebagai URL publik; gambar juga dikirim sebagai image_url
+     * berisi penanda lampiran:<path disk> yang diganti data URL oleh JalankanChat saat request (base64 tidak disimpan di DB).
+     */
+    private static function isiModel(array $m): string|array
+    {
+        $isi = $m['content'];
+        $gambar = [];
+        foreach ($m['lampiran'] ?? [] as $l) {
+            $isi .= "\n[Lampiran: {$l['nama']} ({$l['mime']}, ".round($l['ukuran'] / 1024).' KB) '.rtrim(config('app.url'), '/').$l['url'].']';
+            if (in_array($l['mime'], JalankanChat::MIME_GAMBAR, true)) {
+                // url = /chat-lampiran/{uuid}/{berkas}?signature=… → path disk chat/{uuid}/{berkas}
+                $gambar[] = ['type' => 'image_url', 'image_url' => ['url' => 'lampiran:chat/'.Str::after(parse_url($l['url'], PHP_URL_PATH), '/chat-lampiran/')]];
+            }
+        }
+
+        return $gambar ? [['type' => 'text', 'text' => ltrim($isi)], ...$gambar] : ltrim($isi);
+    }
+
+    public function lampiran(string $uuid, string $berkas): StreamedResponse
+    {
+        $path = "chat/$uuid/$berkas";
+        abort_unless(Storage::disk('local')->exists($path), 404);
+
+        return Storage::disk('local')->response($path, null, [
+            'X-Content-Type-Options' => 'nosniff',
+            'Content-Security-Policy' => "default-src 'none'; img-src 'self'; media-src 'self'; style-src 'unsafe-inline'",
+            'Cache-Control' => 'private, max-age=86400',
+        ]);
     }
 
     /** Dipantau browser tiap detik selama AI berjalan. */
@@ -132,6 +186,7 @@ class ChatController extends Controller
     public function hapus(Request $request, string $uuid): RedirectResponse
     {
         $this->milik($request, $uuid)->delete();
+        Storage::disk('local')->deleteDirectory("chat/$uuid");
         $kembali = $request->input('kembali'); // percakapan yang sedang dibuka saat menghapus percakapan lain
 
         return is_string($kembali) && $kembali !== $uuid && Str::isUuid($kembali) ? to_route('chat', ['uuid' => $kembali]) : to_route('chat');

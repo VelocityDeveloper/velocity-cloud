@@ -18,9 +18,9 @@ use Inertia\Response;
 class TiketController extends Controller
 {
     // Tanpa SVG/HTML: berkas dibuka inline di domain app, jenis yang bisa memuat skrip ditolak.
-    private const LAMPIRAN = ['nullable', 'array', 'max:3'];
+    public const LAMPIRAN = ['nullable', 'array', 'max:3'];
 
-    private const LAMPIRAN_BERKAS = ['file', 'max:10240', 'mimes:jpg,jpeg,png,webp,gif,pdf,mp4,webm,mov', 'mimetypes:image/jpeg,image/png,image/webp,image/gif,application/pdf,video/mp4,video/webm,video/quicktime'];
+    public const LAMPIRAN_BERKAS = ['file', 'max:10240', 'mimes:jpg,jpeg,png,webp,gif,pdf,mp4,webm,mov', 'mimetypes:image/jpeg,image/png,image/webp,image/gif,application/pdf,video/mp4,video/webm,video/quicktime'];
 
     public function index(Request $request): Response
     {

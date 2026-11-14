@@ -1,0 +1,102 @@
+<?php
+
+/*
+| Konfigurasi Velocity Cloud.
+| pods: spesifikasi container per app (kunci = slug di apps.json landing). Image null = belum bisa dipesan.
+| Variabel {sandi} dan {sandi_db} diganti sandi acak per layanan saat provisioning.
+*/
+
+return [
+    'katalog_dir' => env('CLOUD_KATALOG_DIR', '/home/velocitydeveloper-ai-id/src/data'),
+    'domain_app' => env('CLOUD_DOMAIN_APP', 'apps.velocitydeveloper.ai.id'),
+    'whatsapp' => env('CLOUD_WHATSAPP', '6285600566674'),
+
+    'tagihan' => [
+        'terbit_hari_sebelum' => 7,  // tagihan perpanjangan terbit H-7 jatuh tempo
+        'tangguhkan_hari_sesudah' => 3, // layanan ditangguhkan H+3 jika belum lunas
+        'jatuh_tempo_hari' => 3,     // batas bayar tagihan pesanan baru
+    ],
+
+    'pods' => [
+        'n8n' => [
+            'port' => 5678,
+            'containers' => [
+                ['name' => 'n8n', 'image' => 'docker.io/n8nio/n8n:latest', 'env' => ['N8N_HOST' => '{host}', 'N8N_PROTOCOL' => 'https', 'WEBHOOK_URL' => 'https://{host}/'], 'volume' => '/home/node/.n8n'],
+            ],
+            'limit' => ['cpu' => 1, 'memori' => '1g'],
+        ],
+        'wordpress' => [
+            'port' => 80,
+            'containers' => [
+                ['name' => 'db', 'image' => 'docker.io/library/mariadb:11', 'env' => ['MARIADB_DATABASE' => 'wordpress', 'MARIADB_USER' => 'wordpress', 'MARIADB_PASSWORD' => '{sandi_db}', 'MARIADB_RANDOM_ROOT_PASSWORD' => '1'], 'volume' => '/var/lib/mysql'],
+                ['name' => 'web', 'image' => 'docker.io/library/wordpress:6-apache', 'env' => ['WORDPRESS_DB_HOST' => '127.0.0.1', 'WORDPRESS_DB_NAME' => 'wordpress', 'WORDPRESS_DB_USER' => 'wordpress', 'WORDPRESS_DB_PASSWORD' => '{sandi_db}'], 'volume' => '/var/www/html'],
+            ],
+            'limit' => ['cpu' => 1, 'memori' => '1g'],
+        ],
+        'waha' => [
+            'port' => 3000,
+            'containers' => [
+                ['name' => 'waha', 'image' => 'docker.io/devlikeapro/waha:latest', 'env' => ['WAHA_API_KEY' => '{sandi}', 'WAHA_DASHBOARD_PASSWORD' => '{sandi}'], 'volume' => '/app/.sessions'],
+            ],
+            'limit' => ['cpu' => 1, 'memori' => '1g'],
+        ],
+        'evolution-api' => [
+            'port' => 8080,
+            'containers' => [
+                ['name' => 'db', 'image' => 'docker.io/library/postgres:17', 'env' => ['POSTGRES_DB' => 'evolution', 'POSTGRES_USER' => 'evolution', 'POSTGRES_PASSWORD' => '{sandi_db}'], 'volume' => '/var/lib/postgresql/data'],
+                ['name' => 'api', 'image' => 'docker.io/evoapicloud/evolution-api:latest', 'env' => ['AUTHENTICATION_API_KEY' => '{sandi}', 'DATABASE_PROVIDER' => 'postgresql', 'DATABASE_CONNECTION_URI' => 'postgresql://evolution:{sandi_db}@127.0.0.1:5432/evolution', 'SERVER_URL' => 'https://{host}'], 'volume' => '/evolution/instances'],
+            ],
+            'limit' => ['cpu' => 1, 'memori' => '1g'],
+        ],
+        'postgresql' => [
+            'port' => 5432, 'tcp' => true,
+            'containers' => [
+                ['name' => 'postgres', 'image' => 'docker.io/library/postgres:17', 'env' => ['POSTGRES_USER' => 'app', 'POSTGRES_PASSWORD' => '{sandi}', 'POSTGRES_DB' => 'app'], 'volume' => '/var/lib/postgresql/data'],
+            ],
+            'limit' => ['cpu' => 1, 'memori' => '512m'],
+        ],
+        'mysql' => [
+            'port' => 3306, 'tcp' => true,
+            'containers' => [
+                ['name' => 'mariadb', 'image' => 'docker.io/library/mariadb:11', 'env' => ['MARIADB_USER' => 'app', 'MARIADB_PASSWORD' => '{sandi}', 'MARIADB_DATABASE' => 'app', 'MARIADB_RANDOM_ROOT_PASSWORD' => '1'], 'volume' => '/var/lib/mysql'],
+            ],
+            'limit' => ['cpu' => 1, 'memori' => '512m'],
+        ],
+        'redis' => [
+            'port' => 6379, 'tcp' => true,
+            'containers' => [
+                ['name' => 'redis', 'image' => 'docker.io/library/redis:7', 'env' => [], 'args' => ['redis-server', '--appendonly', 'yes', '--requirepass', '{sandi}'], 'volume' => '/data'],
+            ],
+            'limit' => ['cpu' => 0.5, 'memori' => '256m'],
+        ],
+        'uptime-kuma' => [
+            'port' => 3001,
+            'containers' => [
+                ['name' => 'kuma', 'image' => 'docker.io/louislam/uptime-kuma:1', 'env' => [], 'volume' => '/app/data'],
+            ],
+            'limit' => ['cpu' => 0.5, 'memori' => '512m'],
+        ],
+        'metabase' => [
+            'port' => 3000,
+            'containers' => [
+                ['name' => 'metabase', 'image' => 'docker.io/metabase/metabase:latest', 'env' => ['MB_DB_FILE' => '/metabase-data/metabase.db'], 'volume' => '/metabase-data'],
+            ],
+            'limit' => ['cpu' => 1, 'memori' => '2g'],
+        ],
+        'minio' => [
+            'port' => 9001,
+            'containers' => [
+                ['name' => 'minio', 'image' => 'docker.io/minio/minio:latest', 'env' => ['MINIO_ROOT_USER' => 'admin', 'MINIO_ROOT_PASSWORD' => '{sandi}'], 'args' => ['server', '/data', '--console-address', ':9001'], 'volume' => '/data'],
+            ],
+            'limit' => ['cpu' => 1, 'memori' => '1g'],
+        ],
+        'hermes-agent' => [
+            'port' => 8642,
+            'containers' => [
+                // Image resmi Hermes Agent (Nous Research) belum dipastikan; isi lalu app bisa dipesan.
+                ['name' => 'hermes', 'image' => env('CLOUD_IMAGE_HERMES'), 'env' => [], 'volume' => '/root/.hermes'],
+            ],
+            'limit' => ['cpu' => 1, 'memori' => '2g'],
+        ],
+    ],
+];

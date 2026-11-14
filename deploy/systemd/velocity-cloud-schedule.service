@@ -1,0 +1,13 @@
+[Unit]
+Description=Velocity Cloud (schedule) app.velocitydeveloper.ai.id
+After=network.target
+
+[Service]
+User=root
+WorkingDirectory=/home/velocity-cloud
+ExecStart=/usr/bin/php84 artisan schedule:work
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,13 @@
+[Unit]
+Description=Velocity Cloud (web) app.velocitydeveloper.ai.id
+After=network.target
+
+[Service]
+User=root
+WorkingDirectory=/home/velocity-cloud
+ExecStart=/usr/bin/php84 artisan serve --host=127.0.0.1 --port=8187 --no-reload
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

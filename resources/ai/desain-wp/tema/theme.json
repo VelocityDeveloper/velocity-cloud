@@ -1,0 +1,36 @@
+{
+	"$schema": "https://schemas.wp.org/trunk/theme.json",
+	"version": 3,
+	"settings": {
+		"color": {
+			"palette": [
+				{ "slug": "base", "color": "#FFFFFF", "name": "Latar" },
+				{ "slug": "contrast", "color": "#1C2A1F", "name": "Teks gelap" },
+				{ "slug": "accent-1", "color": "#2F5D3A", "name": "Warna utama" },
+				{ "slug": "accent-2", "color": "#EAF1E6", "name": "Utama muda" },
+				{ "slug": "accent-3", "color": "#D9A23B", "name": "Aksen" },
+				{ "slug": "accent-4", "color": "#56645A", "name": "Teks lembut" },
+				{ "slug": "accent-5", "color": "#F8F6F0", "name": "Permukaan" },
+				{ "slug": "accent-6", "color": "#DCE3D8", "name": "Garis" }
+			]
+		},
+		"layout": { "contentSize": "720px", "wideSize": "1200px" }
+	},
+	"styles": {
+		"color": { "background": "var:preset|color|base", "text": "var:preset|color|contrast" },
+		"typography": { "fontFamily": "var:preset|font-family|manrope", "lineHeight": "1.6" },
+		"spacing": { "blockGap": "1.2rem" },
+		"elements": {
+			"heading": { "typography": { "fontWeight": "800", "letterSpacing": "-0.02em", "lineHeight": "1.15" }, "color": { "text": "var:preset|color|contrast" } },
+			"link": { "color": { "text": "var:preset|color|accent-1" } },
+			"button": {
+				"color": { "background": "var:preset|color|accent-1", "text": "var:preset|color|base" },
+				"border": { "radius": "999px" },
+				"typography": { "fontWeight": "700", "fontSize": "var:preset|font-size|medium" },
+				"spacing": { "padding": { "top": "0.85rem", "bottom": "0.85rem", "left": "1.6rem", "right": "1.6rem" } },
+				":hover": { "color": { "background": "var:preset|color|contrast", "text": "var:preset|color|base" } }
+			}
+		},
+		"css": ".wp-site-blocks>*,.wp-block-post-content>.alignfull{margin-block-start:0}.kartu{overflow:hidden;height:100%;transition:transform .2s,box-shadow .2s}.kartu:hover{transform:translateY(-4px);box-shadow:0 14px 30px rgb(0 0 0/.08)}.wp-block-column:has(>.kartu){display:flex;flex-direction:column}.kartu figure{margin:0}.wp-block-button.is-style-outline>.wp-block-button__link{border-width:2px}.wp-block-details summary{font-weight:700;cursor:pointer}.angka h3{margin:0}.wp-site-blocks>header.wp-block-template-part{position:sticky;top:0;z-index:50}@media (max-width:600px){.wp-block-columns.angka.is-not-stacked-on-mobile{flex-wrap:wrap!important;row-gap:var(--wp--preset--spacing--40)}.wp-block-columns.angka.is-not-stacked-on-mobile>.wp-block-column{flex-basis:40%!important}}"
+	}
+}

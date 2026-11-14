@@ -1,0 +1,14 @@
+[Unit]
+Description=Velocity Cloud (queue chat AI) app.velocitydeveloper.ai.id
+After=network.target
+
+[Service]
+User=root
+WorkingDirectory=/home/velocity-cloud
+# Job JalankanChat ada di koneksi/antrean "chat" (config cloud.chat_ai.antrean); worker default tidak membacanya
+ExecStart=/usr/bin/php84 artisan queue:work chat --queue=chat --tries=1 --timeout=1800 --max-time=3600 --sleep=3
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

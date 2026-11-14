@@ -1,0 +1,13 @@
+[Unit]
+Description=Velocity Cloud (queue) app.velocitydeveloper.ai.id
+After=network.target
+
+[Service]
+User=root
+WorkingDirectory=/home/velocity-cloud
+ExecStart=/usr/bin/php84 artisan queue:work --sleep=3 --tries=3 --max-time=3600
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

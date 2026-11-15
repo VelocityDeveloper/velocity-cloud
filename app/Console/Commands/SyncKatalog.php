@@ -31,18 +31,35 @@ class SyncKatalog extends Command
                 ];
             }
         }
+        $varianBaru = []; // slug varian tambahan: dibuat dengan stok 0 sampai kapasitas node dicek (#16)
         foreach ($apps as $i => $a) {
+            $spek = fn ($cpu, $ramMb) => [
+                'kategori_app' => $a['kategori'],
+                'cpu' => str_replace('.', ',', (string) $cpu).' vCPU',
+                'ram' => $ramMb >= 1024 ? str_replace('.', ',', (string) ($ramMb / 1024)).' GB' : $ramMb.' MB',
+            ];
             $baris[] = [
                 'kategori' => PlanKategori::App, 'slug' => 'app-'.$a['slug'], 'nama' => $a['nama'], 'harga' => $a['harga'],
-                'spek' => ['kategori_app' => $a['kategori']], 'fitur' => $a['fitur'], 'ringkas' => $a['ringkas'], 'urutan' => $i,
+                'spek' => isset($a['pod']) ? $spek($a['pod']['cpu'], $a['pod']['ram_mb']) : ['kategori_app' => $a['kategori']],
+                'fitur' => $a['fitur'], 'ringkas' => $a['ringkas'], 'urutan' => $i,
             ];
+            foreach ($a['varian'] ?? [] as $v) {
+                $baris[] = $varianBaru[] = [
+                    'kategori' => PlanKategori::App, 'slug' => 'app-'.$a['slug'].'-'.Str::slug($v['nama']), 'nama' => $a['nama'].' '.$v['nama'],
+                    'harga' => $v['harga'], 'spek' => $spek($v['cpu'], $v['ram_mb']), 'fitur' => $a['fitur'], 'ringkas' => $a['ringkas'], 'urutan' => $i,
+                ];
+            }
         }
 
-        DB::transaction(function () use ($baris) {
+        DB::transaction(function () use ($baris, $varianBaru) {
+            $varianBaru = array_column($varianBaru, 'slug');
             foreach ($baris as $b) {
-                // Aktif & stok diatur di Admin › Paket; paket baru langsung aktif.
+                // Aktif & stok diatur di Admin › Paket; paket baru langsung aktif, varian baru stok 0.
                 $plan = Plan::firstOrNew(['slug' => $b['slug']])->fill($b);
-                $plan->exists || $plan->aktif = true;
+                if (! $plan->exists) {
+                    $plan->aktif = true;
+                    in_array($b['slug'], $varianBaru, true) && $plan->stok = 0;
+                }
                 $plan->save();
             }
             // Paket yang hilang dari landing dinonaktifkan, bukan dihapus (layanan lama tetap merujuk).

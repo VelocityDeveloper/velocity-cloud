@@ -9,11 +9,26 @@
 
 // Limit CPU/RAM pod dibaca dari apps.json landing (field pod) agar spek di situs = spek provisioning.
 $katalogDir = env('CLOUD_KATALOG_DIR', '/home/velocitydeveloper-ai-id/src/data');
-$apps = array_column(json_decode(file_get_contents("$katalogDir/apps.json"), true, flags: JSON_THROW_ON_ERROR), 'pod', 'slug');
+$dataApps = json_decode(file_get_contents("$katalogDir/apps.json"), true, flags: JSON_THROW_ON_ERROR);
+$apps = array_column($dataApps, 'pod', 'slug');
 $limit = fn (string $slug) => ['cpu' => $apps[$slug]['cpu'], 'memori' => $apps[$slug]['ram_mb'].'m'];
+
+// Varian paket app (field varian di apps.json, #16): kunci = slug paket tanpa "app-" (wordpress, wordpress-plus, ...).
+// Paket dasar memakai field pod; varian memakai pod app induk dengan limit CPU/RAM sendiri.
+$varian = [];
+foreach ($dataApps as $a) {
+    if (empty($a['varian'])) {
+        continue;
+    }
+    $varian[$a['slug']] = ['app' => $a['slug'], 'nama' => $a['varian_dasar'] ?? 'Starter', 'cpu' => $a['pod']['cpu'], 'ram_mb' => $a['pod']['ram_mb']];
+    foreach ($a['varian'] as $v) {
+        $varian[$a['slug'].'-'.Illuminate\Support\Str::slug($v['nama'])] = ['app' => $a['slug'], 'nama' => $v['nama'], 'cpu' => $v['cpu'], 'ram_mb' => $v['ram_mb']];
+    }
+}
 
 return [
     'katalog_dir' => $katalogDir,
+    'varian' => $varian,
     // App pelanggan = <acak>.velocitydeveloper.ai.id (DNS wildcard → tunnel → router nginx :8188 → pod). Nama yang sudah dipakai situs dicadangkan.
     'domain_app' => env('CLOUD_DOMAIN_APP', 'velocitydeveloper.ai.id'),
     'subdomain_cadangan' => ['www', 'app', 'ai', 'api', 'admin', 'mail', 'dash', 'panel', 'blog', 'status', 'docs', 'cdn', 'static', 'assets', 'mx', 'smtp', 'imap', 'ns1', 'ns2', 'ftp', 'cpanel', 'webmail'],

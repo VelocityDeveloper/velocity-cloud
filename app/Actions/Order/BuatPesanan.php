@@ -6,6 +6,7 @@ use App\Enums\InvoiceStatus;
 use App\Enums\PlanKategori;
 use App\Enums\ServiceStatus;
 use App\Models\Invoice;
+use App\Models\Node;
 use App\Models\Plan;
 use App\Models\Service;
 use App\Models\User;
@@ -31,6 +32,9 @@ class BuatPesanan
         return DB::transaction(function () use ($user, $plan, $label, $ai, $tokenJuta, $detail) {
             if ($plan->fresh()->sisaStok() === 0) { // cek ulang di dalam transaksi
                 throw new InvalidArgumentException('Stok paket ini habis.');
+            }
+            if ($plan->kategori === PlanKategori::App && (Node::sisaRamPod(segar: true) ?? PHP_INT_MAX) < $plan->ramPodMb()) {
+                throw new InvalidArgumentException('Kapasitas server untuk paket ini sedang penuh.');
             }
 
             $service = Service::create([

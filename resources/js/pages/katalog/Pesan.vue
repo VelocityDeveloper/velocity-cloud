@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Form, Head } from '@inertiajs/vue3';
+import { Form, Head, Link } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
 import KatalogController from '@/actions/App/Http/Controllers/KatalogController';
 import PageHeader from '@/components/cloud/PageHeader.vue';
@@ -17,6 +17,7 @@ const props = defineProps<{
     beli_maks_juta: number;
     endpoint_ai: string;
     pilihan_os: Record<string, string> | null;
+    varian: (Paket & { nama_varian: string })[];
 }>();
 const ai = props.paket.kategori === 'ai';
 
@@ -64,6 +65,38 @@ const namaSpek: Record<string, string> = {
                 :title="ai ? `Beli token ${paket.nama}` : `Pesan ${paket.nama}`"
                 :description="paket.ringkas ?? undefined"
             />
+
+            <nav v-if="varian.length > 1" aria-label="Pilihan paket" class="grid gap-3">
+                <p class="text-sm font-medium text-ink">Pilih paket</p>
+                <div class="grid gap-2 sm:grid-cols-3">
+                    <template v-for="v in varian" :key="v.slug">
+                        <div
+                            v-if="v.habis && v.slug !== paket.slug"
+                            class="rounded-md border border-dashed border-input px-3 py-2.5 text-muted-foreground"
+                        >
+                            <span class="block font-semibold">{{ v.nama_varian }}</span>
+                            <span class="block text-xs">{{ v.spek?.cpu }} · RAM {{ v.spek?.ram }}</span>
+                            <span class="mt-1 block text-sm tabular-nums">{{ rupiah(v.harga) }}/bln</span>
+                            <span class="mt-1 block text-xs">Stok habis</span>
+                        </div>
+                        <Link
+                            v-else
+                            :href="katalog.show(v.slug)"
+                            preserve-scroll
+                            :aria-current="v.slug === paket.slug ? 'page' : undefined"
+                            class="rounded-md border border-input px-3 py-2.5 transition-colors hover:border-brand-600 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                            :class="{ 'border-brand-700 bg-brand-50': v.slug === paket.slug }"
+                        >
+                            <span class="block font-semibold text-ink">{{ v.nama_varian }}</span>
+                            <span class="block text-xs text-muted-foreground">{{ v.spek?.cpu }} · RAM {{ v.spek?.ram }}</span>
+                            <span class="mt-1 block text-sm font-medium text-ink tabular-nums">{{ rupiah(v.harga) }}/bln</span>
+                        </Link>
+                    </template>
+                </div>
+                <p class="text-xs text-muted-foreground">
+                    Semua paket memakai penyimpanan wajar (fair use). CPU dan RAM adalah batas maksimum pod.
+                </p>
+            </nav>
 
             <fieldset v-if="ai" class="grid gap-3">
                 <legend class="text-sm font-medium text-ink">Jumlah token</legend>

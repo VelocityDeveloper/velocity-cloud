@@ -25,6 +25,15 @@ class HargaLanding
                     $this->aktif($a, $aktif);
                     $ketemu = true;
                 }
+                // varian: app-<slug>-<slug nama varian>, sama dengan katalog:sync. "aktif": false di varian hanya penanda;
+                // on/off varian berlaku dari kolom aktif di database (landing & config varian tidak membacanya).
+                foreach ($a['varian'] ?? [] as $k => $v) {
+                    if ('app-'.$a['slug'].'-'.Str::slug($v['nama']) === $plan->slug) {
+                        $a['varian'][$k]['harga'] = $harga;
+                        $this->aktif($a['varian'][$k], $aktif);
+                        $ketemu = true;
+                    }
+                }
             }
         } else {
             $kunci = $plan->kategori->value; // vps | managed | ai

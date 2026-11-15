@@ -20,7 +20,8 @@ class KatalogController extends Controller
     public function index(?string $kategori = null): Response
     {
         return Inertia::render('katalog/Index', [
-            'paket' => Plan::aktif()->orderBy('kategori')->orderBy('urutan')->get()->map(Tampil::plan(...)),
+            // Varian tambahan (mis. WordPress Plus) dipilih di halaman pesan app induk, tidak tampil sebagai baris sendiri.
+            'paket' => Plan::aktif()->orderBy('kategori')->orderBy('urutan')->get()->reject(fn (Plan $p) => $p->varianTambahan())->values()->map(Tampil::plan(...)),
             'kategori' => self::KATEGORI_URL[$kategori ?? 'app'],
         ]);
     }
@@ -31,6 +32,7 @@ class KatalogController extends Controller
 
         return Inertia::render('katalog/Pesan', [
             'paket' => Tampil::plan($plan),
+            'varian' => $plan->keluargaVarian()->map(fn (Plan $p) => [...Tampil::plan($p), 'nama_varian' => $p->varian()['nama']]),
             'domain_app' => config('cloud.domain_app'),
             'beli_maks_juta' => config('cloud.token_ai.beli_maks_juta'),
             'endpoint_ai' => config('cloud.token_ai.endpoint'),

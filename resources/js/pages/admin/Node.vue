@@ -27,6 +27,7 @@ type NodeRow = {
     agent_url: string;
     da_user: string | null;
     kapasitas_pod: number;
+    ram_pod_mb: number | null;
     aktif: boolean;
     services_count: number;
 };
@@ -54,6 +55,7 @@ const f = useForm({
     da_user: "",
     token: "",
     kapasitas_pod: 20,
+    ram_pod_mb: null as number | null,
     aktif: true,
 });
 
@@ -66,6 +68,7 @@ function buka(n: Partial<NodeRow>) {
         da_user: n.da_user ?? "",
         token: "",
         kapasitas_pod: n.kapasitas_pod ?? 20,
+        ram_pod_mb: n.ram_pod_mb ?? null,
         aktif: n.aktif ?? true,
     });
     f.reset();
@@ -130,7 +133,11 @@ function uji(n: NodeRow) {
                         >
                     </td>
                     <td class="text-right">
-                        {{ n.services_count }} / {{ n.kapasitas_pod }}
+                        {{ n.services_count }} / {{ n.kapasitas_pod }}<span
+                            v-if="n.ram_pod_mb"
+                            class="block text-xs text-muted-foreground"
+                            >RAM maks {{ n.ram_pod_mb }} MB</span
+                        >
                     </td>
                     <td>
                         <StatusBadge
@@ -265,6 +272,21 @@ function uji(n: NodeRow) {
                             required
                         />
                         <InputError :message="f.errors.kapasitas_pod" />
+                    </div>
+                    <div v-if="f.jenis === 'pod'" class="grid gap-2">
+                        <Label for="ram_pod_mb">RAM untuk pod (MB)</Label>
+                        <Input
+                            id="ram_pod_mb"
+                            :model-value="f.ram_pod_mb ?? undefined"
+                            @update:model-value="(v) => (f.ram_pod_mb = v === '' || v == null ? null : Number(v))"
+                            type="number"
+                            min="256"
+                            placeholder="Kosong = hanya batas jumlah pod"
+                        />
+                        <p class="text-xs text-muted-foreground">
+                            Pod baru tidak dibuat di node ini bila total batas RAM pod melebihi angka ini.
+                        </p>
+                        <InputError :message="f.errors.ram_pod_mb" />
                     </div>
                     <div class="flex items-center gap-2 text-sm">
                         <input id="aktif" v-model="f.aktif" type="checkbox" />

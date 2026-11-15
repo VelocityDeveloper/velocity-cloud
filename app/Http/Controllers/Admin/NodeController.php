@@ -21,7 +21,7 @@ class NodeController extends Controller
     {
         return Inertia::render('admin/Node', [
             'node' => Node::withCount(['services' => fn ($q) => $q->whereIn('status', [ServiceStatus::Aktif, ServiceStatus::Ditangguhkan])])
-                ->orderBy('nama')->get(['id', 'nama', 'jenis', 'agent_url', 'da_user', 'kapasitas_pod', 'aktif']),
+                ->orderBy('nama')->get(['id', 'nama', 'jenis', 'agent_url', 'da_user', 'kapasitas_pod', 'ram_pod_mb', 'aktif']),
             'jenis' => Node::JENIS,
         ]);
     }
@@ -85,6 +85,7 @@ class NodeController extends Controller
             // incus: sertifikat server PEM dari skrip pasang-node.sh (dipakai memverifikasi node, bukan rahasia).
             'token' => [$baru ? 'required' : 'nullable', 'string', 'min:32', $request->input('jenis') === 'incus' ? 'max:5000' : 'max:255', ...($request->input('jenis') === 'incus' ? ['starts_with:-----BEGIN CERTIFICATE-----'] : [])],
             'kapasitas_pod' => ['required', 'integer', 'min:1', 'max:1000'],
+            'ram_pod_mb' => ['nullable', 'integer', 'min:256', 'max:1048576'], // khusus node pod
             'aktif' => ['required', 'boolean'],
         ]);
     }

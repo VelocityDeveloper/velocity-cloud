@@ -10,6 +10,7 @@ use App\Services\Provisioning\PodSpec;
 use App\Services\Provisioning\SiapkanApp;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Crypt;
 use Throwable;
 
@@ -32,7 +33,13 @@ class ProvisionPod implements ShouldQueue
             return;
         }
 
-        $node = $service->node ?? $this->pilihNode();
+        // Pilih node + catat node_id di bawah kunci, agar worker lain yang memilih node ikut menghitung pod ini (Disiapkan + node_id).
+        $node = $service->node ?? Cache::lock('pilih-node-pod', 60)->block(30, function () use ($service) {
+            $node = $this->pilihNode($service->plan->ramPodMb());
+            $node && $service->update(['node_id' => $node->id]);
+
+            return $node;
+        });
         if (! $node) {
             $this->gagal($service, 'Belum ada node aktif dengan kapasitas tersisa.');
 
@@ -66,16 +73,25 @@ class ProvisionPod implements ShouldQueue
 
     private function gagal(Service $service, string $pesan): void
     {
-        $service->update(['status' => ServiceStatus::Gagal, 'pesan_gagal' => mb_substr($pesan, 0, 1000)]);
+        // node_id dilepas agar coba ulang memilih node lagi (seperti sebelum node dicatat lebih awal)
+        $service->update(['status' => ServiceStatus::Gagal, 'node_id' => null, 'pesan_gagal' => mb_substr($pesan, 0, 1000)]);
     }
 
-    /** Node aktif dengan pod paling sedikit yang masih di bawah kapasitas. */
-    private function pilihNode(): ?Node
+    /**
+     * Node aktif dengan pod paling sedikit yang masih di bawah kapasitas. Bila node punya ram_pod_mb,
+     * jumlah limit RAM pod yang ada + pod baru juga tidak boleh melebihinya (varian 2–4 GB, #16).
+     */
+    private function pilihNode(int $ramBaru): ?Node
     {
+        $dipakai = [ServiceStatus::Aktif, ServiceStatus::Ditangguhkan];
+
         return Node::where('aktif', true)->where('jenis', 'pod')
-            ->withCount(['services' => fn ($q) => $q->whereIn('status', [ServiceStatus::Aktif, ServiceStatus::Ditangguhkan])])
+            ->withCount(['services' => fn ($q) => $q->whereIn('status', $dipakai)])
             ->get()
             ->filter(fn (Node $n) => $n->services_count < $n->kapasitas_pod)
+            ->filter(fn (Node $n) => $n->ram_pod_mb === null
+                // pod yang sedang dibuat di node ini (Disiapkan + node_id) ikut dihitung agar dua worker tidak melampaui RAM
+                || $n->services()->whereIn('status', [...$dipakai, ServiceStatus::Disiapkan])->with('plan')->get()->sum(fn ($s) => $s->plan->ramPodMb()) + $ramBaru <= $n->ram_pod_mb)
             ->sortBy('services_count')
             ->first();
     }

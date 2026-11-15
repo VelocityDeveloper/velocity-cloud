@@ -2,6 +2,7 @@
 import { Form, Head, Link } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
 import KatalogController from '@/actions/App/Http/Controllers/KatalogController';
+import DataTable from '@/components/cloud/DataTable.vue';
 import PageHeader from '@/components/cloud/PageHeader.vue';
 import InputError from '@/components/InputError.vue';
 import { Button } from '@/components/ui/button';
@@ -57,46 +58,56 @@ const namaSpek: Record<string, string> = {
     <Head :title="ai ? `Beli token ${paket.nama}` : `Pesan ${paket.nama}`" />
     <Form
         v-bind="KatalogController.store.form(paket.slug)"
-        class="grid gap-8 p-4 md:p-6 lg:grid-cols-[1fr_20rem]"
+        class="grid gap-8 p-4 md:p-6 lg:grid-cols-[1fr_20rem] [&>*]:min-w-0"
         v-slot="{ errors, processing }"
     >
-        <div class="max-w-xl space-y-6">
+        <div class="max-w-xl min-w-0 space-y-6">
             <PageHeader
                 :title="ai ? `Beli token ${paket.nama}` : `Pesan ${paket.nama}`"
                 :description="paket.ringkas ?? undefined"
             />
 
-            <nav v-if="varian.length > 1" aria-label="Pilihan paket" class="grid gap-3">
-                <p class="text-sm font-medium text-ink">Pilih paket</p>
-                <div class="grid gap-2 sm:grid-cols-3">
-                    <template v-for="v in varian" :key="v.slug">
-                        <div
-                            v-if="v.habis && v.slug !== paket.slug"
-                            class="rounded-md border border-dashed border-input px-3 py-2.5 text-muted-foreground"
+            <section v-if="varian.length > 1" aria-labelledby="judul-varian" class="grid gap-3">
+                <h2 id="judul-varian" class="text-sm font-medium text-ink">Pilih paket</h2>
+                <DataTable>
+                    <thead>
+                        <tr>
+                            <th scope="col">Paket</th>
+                            <th scope="col">CPU</th>
+                            <th scope="col">RAM</th>
+                            <th scope="col">Penyimpanan</th>
+                            <th scope="col" class="text-right">Harga/bulan</th>
+                            <th scope="col" class="text-right">Pilih</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr
+                            v-for="v in varian"
+                            :key="v.slug"
+                            :class="{ 'bg-volt/10 shadow-[inset_3px_0_0_var(--color-volt-600)]': v.slug === paket.slug }"
                         >
-                            <span class="block font-semibold">{{ v.nama_varian }}</span>
-                            <span class="block text-xs">{{ v.spek?.cpu }} · RAM {{ v.spek?.ram }}</span>
-                            <span class="mt-1 block text-sm tabular-nums">{{ rupiah(v.harga) }}/bln</span>
-                            <span class="mt-1 block text-xs">Stok habis</span>
-                        </div>
-                        <Link
-                            v-else
-                            :href="katalog.show(v.slug)"
-                            preserve-scroll
-                            :aria-current="v.slug === paket.slug ? 'page' : undefined"
-                            class="rounded-md border border-input px-3 py-2.5 transition-colors hover:border-brand-600 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-                            :class="{ 'border-brand-700 bg-brand-50': v.slug === paket.slug }"
-                        >
-                            <span class="block font-semibold text-ink">{{ v.nama_varian }}</span>
-                            <span class="block text-xs text-muted-foreground">{{ v.spek?.cpu }} · RAM {{ v.spek?.ram }}</span>
-                            <span class="mt-1 block text-sm font-medium text-ink tabular-nums">{{ rupiah(v.harga) }}/bln</span>
-                        </Link>
-                    </template>
-                </div>
+                            <th scope="row" class="text-ink">
+                                {{ v.nama_varian }}
+                                <span v-if="!v.bisa_dipesan" class="block text-xs font-normal text-muted-foreground">{{ v.habis ? 'Stok habis' : 'Belum tersedia' }}</span>
+                            </th>
+                            <td>{{ v.spek?.cpu }}</td>
+                            <td>{{ v.spek?.ram }}</td>
+                            <td>Wajar (fair use)</td>
+                            <td class="text-right font-semibold text-ink">{{ rupiah(v.harga) }}</td>
+                            <td class="text-right">
+                                <Button v-if="v.slug === paket.slug" size="sm" variant="outline" disabled>Dipilih</Button>
+                                <Button v-else-if="!v.bisa_dipesan" size="sm" variant="outline" disabled>Pilih</Button>
+                                <Button v-else as-child size="sm">
+                                    <Link :href="katalog.show(v.slug)" preserve-scroll>Pilih</Link>
+                                </Button>
+                            </td>
+                        </tr>
+                    </tbody>
+                </DataTable>
                 <p class="text-xs text-muted-foreground">
-                    Semua paket memakai penyimpanan wajar (fair use). CPU dan RAM adalah batas maksimum pod.
+                    CPU dan RAM adalah batas maksimum pod.<span class="sm:hidden"> Geser tabel ke samping untuk melihat harga.</span>
                 </p>
-            </nav>
+            </section>
 
             <fieldset v-if="ai" class="grid gap-3">
                 <legend class="text-sm font-medium text-ink">Jumlah token</legend>
@@ -171,7 +182,7 @@ const namaSpek: Record<string, string> = {
 
             <p v-if="paket.kategori === 'app'" class="rounded-md bg-brand-50 px-3 py-2 text-sm text-ink">
                 Alamat app dibuat otomatis, misalnya
-                <span class="font-mono">https://k7m2x9q4ra.{{ domain_app }}</span>.
+                <span class="font-mono break-all">https://k7m2x9q4ra.{{ domain_app }}</span>.
                 Custom domain sendiri menyusul.
             </p>
 

@@ -14,6 +14,7 @@ import type { Paket } from '@/types';
 
 const props = defineProps<{
     paket: Paket;
+    alternatif: Paket[];
     domain_app: string;
     beli_maks_juta: number;
     endpoint_ai: string;
@@ -187,7 +188,24 @@ const namaSpek: Record<string, string> = {
             </p>
 
             <template v-if="!ai">
-                <p v-if="paket.habis" class="text-sm text-destructive">
+                <div v-if="paket.habis && alternatif.length" class="rounded-md border border-brand-100 bg-brand-50 p-4 text-sm">
+                    <p class="font-medium text-ink">Paket ini sedang habis. Rekomendasi paket yang tersedia:</p>
+                    <ul class="mt-3 grid gap-2">
+                        <li v-for="a in alternatif" :key="a.slug" class="flex items-center justify-between gap-4 rounded-md bg-white px-3 py-2">
+                            <span>
+                                <span class="font-semibold text-brand-700">{{ a.nama }}</span>
+                                <span class="block text-xs text-muted-foreground">
+                                    {{ [a.spek?.cpu, a.spek?.ram, a.spek?.disk].filter(Boolean).join(' · ') }}
+                                </span>
+                            </span>
+                            <span class="flex items-center gap-3">
+                                <span class="font-medium tabular-nums">{{ rupiah(a.harga) }}</span>
+                                <Button as-child size="sm"><Link :href="katalog.show(a.slug)">Pilih</Link></Button>
+                            </span>
+                        </li>
+                    </ul>
+                </div>
+                <p v-if="paket.habis && !alternatif.length" class="text-sm text-destructive">
                     Stok paket ini sedang habis.
                 </p>
                 <Button

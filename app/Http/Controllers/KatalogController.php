@@ -30,9 +30,16 @@ class KatalogController extends Controller
     {
         abort_unless($plan->aktif, 404);
 
+        // Paket habis: tawarkan paket sekategori yang lebih murah dan masih bisa dipesan (terdekat dulu).
+        $alternatif = $plan->sisaStok() === 0 && $plan->harga !== null
+            ? Plan::aktif()->where('kategori', $plan->kategori)->where('harga', '<', $plan->harga)->orderByDesc('harga')->get()
+                ->filter(fn (Plan $p) => $p->bisaDipesan())->take(2)->values()->map(Tampil::plan(...))
+            : [];
+
         return Inertia::render('katalog/Pesan', [
             'paket' => Tampil::plan($plan),
             'varian' => $plan->keluargaVarian()->map(fn (Plan $p) => [...Tampil::plan($p), 'nama_varian' => $p->varian()['nama']]),
+            'alternatif' => $alternatif,
             'domain_app' => config('cloud.domain_app'),
             'beli_maks_juta' => config('cloud.token_ai.beli_maks_juta'),
             'endpoint_ai' => config('cloud.token_ai.endpoint'),

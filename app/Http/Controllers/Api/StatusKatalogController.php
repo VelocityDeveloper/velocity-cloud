@@ -9,7 +9,9 @@ use Illuminate\Support\Facades\Cache;
 
 /**
  * Status stok paket untuk landing (dibaca JS di browser): {slug: {habis, bisa_dipesan}}.
- * Publik & tanpa sesi; di-cache 60 detik karena tiap tampilan landing memanggilnya.
+ * Publik & tanpa sesi; di-cache 60 detik karena tiap tampilan landing memanggilnya (data bisa tertinggal ±2 menit dengan cache browser).
+ * Paket nonaktif sengaja ikut: landing tetap menampilkannya, jadi butuh bisa_dipesan=false agar tombol Pesan diganti.
+ * Landing wajib memakai bisa_dipesan (habis hanya soal stok; app juga bisa tertutup karena RAM node penuh/pod belum siap).
  */
 class StatusKatalogController extends Controller
 {

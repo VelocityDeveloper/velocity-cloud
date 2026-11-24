@@ -224,7 +224,7 @@ class Laporan
     public function event(CarbonImmutable $dari, CarbonImmutable $sampai): array
     {
         return $this->q($dari, $sampai, 'ev')
-            ->selectRaw('event, label, COUNT(*) AS jumlah, COUNT(DISTINCT vid) AS pengguna')->groupBy('event', 'label')->orderByDesc('jumlah')->limit(50)->get()
+            ->selectRaw('event, label, COUNT(*) AS jumlah, COUNT(DISTINCT vid) AS pengguna')->groupBy('event', 'label')->orderByDesc('jumlah')->limit(200)->get() // label terpecah per halaman|lokasi sejak 24 Nov
             ->map(fn ($r) => ['event' => $r->event, 'label' => $r->label, 'jumlah' => (int) $r->jumlah, 'pengguna' => (int) $r->pengguna])->all();
     }
 

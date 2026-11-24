@@ -168,7 +168,7 @@ const kolomPengguna = [
 
         <section id="event" class="scroll-mt-16 space-y-4">
             <h2 class="text-lg font-bold text-ink">Event</h2>
-            <TabelBatang judul="Event & konversi" keterangan="Klik Pesan (label = paket), WhatsApp (label = halaman), Daftar, Masuk, dan tautan keluar." nama="Event" :baris="laporan.event" :kolom="[{ kunci: 'jumlah', label: 'Jumlah', format: angka }, { kunci: 'pengguna', label: 'Pengguna', format: angka }]">
+            <TabelBatang judul="Event & konversi" keterangan="Label: Pesan = paket|halaman; Daftar dan Masuk = halaman|lokasi tombol (header, buat-akun, bawah, lain); WhatsApp = halaman; tautan keluar = host. Maks 200 baris." nama="Event" :baris="laporan.event" :kolom="[{ kunci: 'jumlah', label: 'Jumlah', format: angka }, { kunci: 'pengguna', label: 'Pengguna', format: angka }]">
                 <template #nama="{ baris }"><span class="font-medium">{{ NAMA_EVENT[baris.event] ?? baris.event }}</span><span v-if="baris.label" class="ml-2 text-xs text-muted-foreground">{{ baris.label }}</span></template>
             </TabelBatang>
         </section>

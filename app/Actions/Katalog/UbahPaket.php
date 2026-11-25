@@ -26,7 +26,8 @@ class UbahPaket
             default => array_filter($spek, 'filled'),
         };
         $spekBerubah = $spekBaru != $plan->spek;
-        $situsBerubah = $plan->harga !== $harga || $plan->aktif !== $aktif || $spekBerubah;
+        // paket tersembunyi tidak ada di landing
+        $situsBerubah = ! $plan->tersembunyi && ($plan->harga !== $harga || $plan->aktif !== $aktif || $spekBerubah);
         if ($situsBerubah) {
             $this->landing->simpan($plan, $harga, $aktif, $spekBerubah ? ($plan->kategori === PlanKategori::Ai ? $spekBaru : $spek) : null); // tulis JSON dulu: gagal = DB tidak berubah
         }

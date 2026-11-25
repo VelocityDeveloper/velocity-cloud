@@ -58,8 +58,8 @@ class SyncKatalog extends Command
                 }
                 $plan->save();
             }
-            // Paket yang hilang dari landing dinonaktifkan, bukan dihapus (layanan lama tetap merujuk).
-            Plan::whereIn('kategori', [PlanKategori::Vps, PlanKategori::Managed, PlanKategori::Hosting, PlanKategori::App])
+            // Paket yang hilang dari landing dinonaktifkan, bukan dihapus (layanan lama tetap merujuk). Paket tersembunyi memang tak ada di landing.
+            Plan::where('tersembunyi', false)->whereIn('kategori', [PlanKategori::Vps, PlanKategori::Managed, PlanKategori::Hosting, PlanKategori::App])
                 ->whereNotIn('slug', array_column($baris, 'slug'))->update(['aktif' => false]);
 
             // Token AI tidak ada di landing: dibuat sekali dari config, sesudahnya diatur di Admin › Paket.

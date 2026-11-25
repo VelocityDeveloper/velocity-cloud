@@ -24,6 +24,7 @@ class Plan extends Model
             'spek' => 'array',
             'fitur' => 'array',
             'aktif' => 'boolean',
+            'tersembunyi' => 'boolean',
             'stok' => 'integer',
             'sumber' => 'encrypted:array',
         ];

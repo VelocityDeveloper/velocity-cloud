@@ -23,7 +23,7 @@ class KatalogController extends Controller
     {
         return Inertia::render('katalog/Index', [
             // Varian tambahan (mis. WordPress Plus) dipilih di halaman pesan app induk, tidak tampil sebagai baris sendiri.
-            'paket' => Plan::aktif()->orderBy('kategori')->orderBy('urutan')->get()->reject(fn (Plan $p) => $p->varianTambahan())->values()->map(Tampil::plan(...)),
+            'paket' => Plan::aktif()->where('tersembunyi', false)->orderBy('kategori')->orderBy('urutan')->get()->reject(fn (Plan $p) => $p->varianTambahan())->values()->map(Tampil::plan(...)),
             'kategori' => self::KATEGORI_URL[$kategori ?? 'app'],
             'promo' => self::promoAktif(),
         ]);
@@ -35,7 +35,7 @@ class KatalogController extends Controller
 
         // Paket habis: tawarkan paket sekategori yang lebih murah dan masih bisa dipesan (terdekat dulu).
         $alternatif = $plan->sisaStok() === 0 && $plan->harga !== null
-            ? Plan::aktif()->where('kategori', $plan->kategori)->where('harga', '<', $plan->harga)->orderByDesc('harga')->get()
+            ? Plan::aktif()->where('tersembunyi', false)->where('kategori', $plan->kategori)->where('harga', '<', $plan->harga)->orderByDesc('harga')->get()
                 ->filter(fn (Plan $p) => $p->bisaDipesan())->take(2)->values()->map(Tampil::plan(...))
             : [];
 

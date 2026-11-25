@@ -16,18 +16,25 @@ class LaporanSeo
 
     public function __construct(private SearchConsole $gsc) {}
 
-    public function semua(string $periode, bool $segarkan = false): array
+    /** $dari/$sampai (Y-m-d) diisi = rentang kustom, $periode diabaikan. */
+    public function semua(string $periode, bool $segarkan = false, ?string $dari = null, ?string $sampai = null): array
     {
         if (! $this->gsc->terhubung()) {
             return ['status' => 'belum_terhubung'];
         }
-        $kunci = "gsc:laporan:$periode";
+        if ($dari && $sampai) {
+            [$dari, $sampai] = [CarbonImmutable::parse($dari), CarbonImmutable::parse($sampai)];
+        } else {
+            $sampai = CarbonImmutable::yesterday();
+            $dari = $sampai->subDays(self::HARI[$periode] - 1);
+        }
+        $kunci = 'gsc:laporan:'.$dari->toDateString().':'.$sampai->toDateString();
         if ($segarkan) {
             Cache::forget($kunci);
         }
 
         try {
-            return Cache::remember($kunci, 3 * 3600, fn () => ['status' => 'ok', 'diambil' => now()->toIso8601String(), ...$this->hitung($periode)]);
+            return Cache::remember($kunci, 3 * 3600, fn () => ['status' => 'ok', 'diambil' => now()->toIso8601String(), ...$this->hitung($dari, $sampai)]);
         } catch (Throwable $e) {
             Log::warning('GSC gagal', ['galat' => $e->getMessage()]);
 
@@ -35,11 +42,9 @@ class LaporanSeo
         }
     }
 
-    private function hitung(string $periode): array
+    private function hitung(CarbonImmutable $dari, CarbonImmutable $sampai): array
     {
-        $n = self::HARI[$periode];
-        $sampai = CarbonImmutable::yesterday();
-        $dari = $sampai->subDays($n - 1);
+        $n = (int) $dari->diffInDays($sampai) + 1;
         [$dariLalu, $sampaiLalu] = [$dari->subDays($n), $dari->subDay()];
         $f = fn (CarbonImmutable $d) => $d->toDateString();
 

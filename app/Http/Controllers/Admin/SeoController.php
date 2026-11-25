@@ -19,9 +19,12 @@ class SeoController extends Controller
         $filter = $request->validate([
             'periode' => ['nullable', 'in:'.implode(',', array_keys(LaporanSeo::PERIODE))],
             'segarkan' => ['nullable', 'boolean'],
+            // GSC menyimpan data ±16 bulan
+            'dari' => ['nullable', 'required_with:sampai', 'date_format:Y-m-d', 'after_or_equal:'.now()->subMonths(16)->toDateString()],
+            'sampai' => ['nullable', 'required_with:dari', 'date_format:Y-m-d', 'after_or_equal:dari', 'before_or_equal:today'],
         ]);
         $periode = $filter['periode'] ?? '28h';
-        $seo = $laporan->semua($periode, (bool) ($filter['segarkan'] ?? false));
+        $seo = $laporan->semua($periode, (bool) ($filter['segarkan'] ?? false), $filter['dari'] ?? null, $filter['sampai'] ?? null);
         if ($seo['status'] === 'ok') {
             // Pengunjung landing (analitik sendiri) per hari, tanggal sama dengan tren GSC, untuk grafik gabungan
             [$dari, $sampai] = [CarbonImmutable::parse($seo['dari']), CarbonImmutable::parse($seo['sampai'])->addDay()];
@@ -29,7 +32,7 @@ class SeoController extends Controller
         }
 
         return Inertia::render('admin/Seo', [
-            'periode' => $periode,
+            'periode' => isset($filter['dari']) ? 'kustom' : $periode,
             'pilihanPeriode' => LaporanSeo::PERIODE,
             'situs' => config('cloud.gsc.situs'),
             'laporan' => $seo,

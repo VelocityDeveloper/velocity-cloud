@@ -125,6 +125,8 @@ return [
         // kelola domain milik customer (nameserver dsb.): API panel customer-vdnet CRM, header vdnet-key = CUSTOMER_VDNET_KEY CRM
         'customer_url' => env('CRM_CUSTOMER_URL', 'http://127.0.0.1:8174/api/api/customer-vdnet'),
         'customer_key' => env('CRM_CUSTOMER_KEY'),
+        // arah sebaliknya: CRM membaca layanan per email lewat /api/crm/layanan (Bearer)
+        'masuk_key' => env('CRM_MASUK_KEY'),
     ],
 
     'pods' => [

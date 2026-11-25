@@ -47,6 +47,12 @@ class SeoTest extends TestCase
         // halaman menambah pengunjung landing per hari, sepanjang tren GSC (untuk grafik gabungan)
         $this->actingAs(User::factory()->create(['is_admin' => true]))->get(route('admin.seo.index', ['periode' => '7h']))
             ->assertInertia(fn (Assert $p) => $p->where('laporan.status', 'ok')->has('laporan.pengunjung', 7));
+        // rentang tanggal kustom: 3 hari, periode pembanding 3 hari sebelumnya
+        $dari = CarbonImmutable::yesterday()->subDays(2)->toDateString();
+        $this->get(route('admin.seo.index', ['dari' => $dari, 'sampai' => $kemarin]))
+            ->assertInertia(fn (Assert $p) => $p->where('periode', 'kustom')->where('laporan.dari', $dari)->has('laporan.tren', 3)->where('laporan.ringkasan.klik', 3));
+        $this->get(route('admin.seo.index', ['dari' => $kemarin, 'sampai' => $dari]))->assertSessionHasErrors('sampai');
+        $this->get(route('admin.seo.index', ['dari' => now()->subMonths(17)->toDateString(), 'sampai' => $kemarin]))->assertSessionHasErrors('dari');
         unlink($berkas);
 
         $this->assertSame('ok', $l['status']);

@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use App\Models\Tiket;
+use App\Services\Pengingat\DaftarPengingat;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
 
@@ -45,6 +46,8 @@ class HandleInertiaRequests extends Middleware
             'whatsapp' => config('cloud.whatsapp'),
             // badge menu admin Tiket: jumlah tiket menunggu balasan tim
             'tiketTerbuka' => fn () => $request->user()?->is_admin ? Tiket::where('status', 'terbuka')->count() : 0,
+            // pengingat pelanggan: jatuh tempo H-7, tagihan tertunda, saldo token menipis (hanya baca)
+            'pengingat' => fn () => $request->user() ? app(DaftarPengingat::class)->untuk($request->user()) : [],
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
         ];
     }

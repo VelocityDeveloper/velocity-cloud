@@ -10,3 +10,5 @@ Artisan::command('inspire', function () {
 
 Schedule::command('tagihan:proses')->dailyAt('07:00');
 Schedule::command('analitik:impor')->everyMinute()->withoutOverlapping();
+// Pengingat jatuh tempo email (25 Nov): hanya berjalan setelah PENGINGAT_EMAIL_AKTIF=true; pemberitahuan dashboard tidak butuh jadwal
+Schedule::command('pengingat:email')->dailyAt(config('pengingat.email.jam'))->when(fn () => config('pengingat.email.aktif'));

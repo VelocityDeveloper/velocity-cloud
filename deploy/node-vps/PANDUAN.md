@@ -136,3 +136,20 @@ Cek dari node: `wg show` harus menampilkan `latest handshake`.
 - **Belum ada:** hapus VM otomatis saat layanan dibatalkan (masih manual, lihat langkah 8.7), reinstall OS dari dashboard, backup/snapshot, dan web console.
 - **Satu PC = satu titik gagal.** Kalau PC mati, semua VPS di dalamnya ikut mati. VM menyala lagi otomatis saat PC hidup (`boot.autostart`).
 - **Pembaruan:** unattended-upgrades terpasang di node dan relay. Incus diperbarui lewat `apt upgrade`; VM tetap berjalan, kecuali saat QEMU diperbarui.
+
+## Custom domain VPS di node ber-IP publik (vc-edge, 25 Nov 2026)
+
+Node ber-IP publik (matsuba) tidak menjalankan web server di host. Port 80/443 node di-DNAT ke container
+**vc-edge** (`10.77.0.254`, project `velocity`), yang berisi nginx + certbot + `vc-relay-vps-sync`:
+
+```
+domain → IP node :80/:443 → vc-edge (SSL Let's Encrypt) → VM 10.77.0.N:80
+```
+
+- Pasang di node: `bash pasang-edge.sh <berkas token CLOUD_RELAY_TOKEN> <vps_host node>`. Aman diulang.
+- Edge menarik `/relay/domain-vps?host=<vps_host>`, jadi hanya VM node itu (subnet 10.77.0.0/24 sama di semua node).
+- `www.<domain>` ikut dilayani bila A record-nya sama.
+- Saat aktivasi, domain harus **DNS only**, karena *Periksa DNS* mencocokkan A record dengan IP node. Setelah SSL terbit, Cloudflare proxied (Full strict) boleh dipakai.
+- Hairpin: VM yang membuka domainnya sendiri lewat IP node tetap sampai ke edge.
+- VM pelanggan memakai `security.port_isolation`, jadi tidak bisa saling menjangkau. Edge tidak diisolasi, tapi firewall di dalam edge hanya mengizinkan keluar ke VM port 80.
+- Email tidak lewat edge, dan SMTP 25 keluar VM tetap diblok.

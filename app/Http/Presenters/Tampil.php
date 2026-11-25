@@ -52,7 +52,7 @@ class Tampil
                 'custom_domain_aktif' => (bool) $s->custom_domain_aktif_at,
                 'domain_didukung' => ! $s->isAi() && ! $s->isDomain(),
                 'domain_relay' => $s->domainLewatRelay(),
-                'relay_ip' => $s->domainLewatRelay() ? config('cloud.relay_ip') : ($detail['host'] ?? null),
+                'relay_ip' => $s->ipRelay() ?? ($detail['host'] ?? null),
                 'spek' => $s->plan->spek,
                 'is_app' => $s->isApp(),
                 'otomatis' => $s->isApp() || $s->isHosting() || $s->isDomain() || $s->plan->vpsOtomatis(),

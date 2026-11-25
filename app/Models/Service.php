@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Enums\PlanKategori;
 use App\Enums\ServiceStatus;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
@@ -93,18 +94,34 @@ class Service extends Model
     }
 
     /**
-     * Custom domain disambung otomatis lewat relay HTTPS: app → router PC, VPS/managed di belakang relay VPS → VM port 80.
-     * shortcut: anggap relay VPS (vps.relay_host) = mesin relay HTTPS (relay_ip, Sumopod); pisahkan bila relay dipecah.
+     * Custom domain disambung otomatis lewat relay HTTPS: app → router PC, VPS/managed → VM port 80
+     * (VM di belakang relay Sumopod lewat relay itu; VM di node ber-IP publik lewat container vc-edge di node).
      */
     public function domainLewatRelay(): bool
     {
-        if ($this->isApp()) {
-            return true;
-        }
-        $relay = config('cloud.vps.relay_host');
+        return $this->ipRelay() !== null;
+    }
 
-        return in_array($this->plan->kategori, [PlanKategori::Vps, PlanKategori::Managed], true)
-            && $relay && ($this->detail['host'] ?? null) === $relay && ! empty($this->detail['ip']);
+    /** IP tujuan A record custom domain; null = belum bisa disambung otomatis. */
+    public function ipRelay(): ?string
+    {
+        if ($this->isApp()) {
+            return config('cloud.relay_ip');
+        }
+        $host = $this->detail['host'] ?? null;
+        if (! in_array($this->plan->kategori, [PlanKategori::Vps, PlanKategori::Managed], true) || ! $host || empty($this->detail['ip'])) {
+            return null;
+        }
+        // shortcut: anggap relay VPS (vps.relay_host) = mesin relay HTTPS (relay_ip, Sumopod); pisahkan bila relay dipecah.
+        if ($host === config('cloud.vps.relay_host')) {
+            return config('cloud.relay_ip');
+        }
+        // shortcut: tiap node ber-IP publik dianggap punya vc-edge di 80/443 (deploy/node-vps/pasang-edge.sh); beri penanda per node bila ada node tanpa edge.
+        if ($host === $this->node?->vps_host) {
+            return Cache::remember("ip-host:$host", 3600, fn () => filter_var(gethostbyname($host), FILTER_VALIDATE_IP) ?: null);
+        }
+
+        return null;
     }
 
     /** Nama pod di node, stabil dan unik per layanan. */

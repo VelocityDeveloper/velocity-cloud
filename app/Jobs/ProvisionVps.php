@@ -106,7 +106,8 @@ class ProvisionVps implements ShouldQueue
             ],
             'devices' => [
                 'root' => ['type' => 'disk', 'path' => '/', 'pool' => $cfg['pool'], 'size' => $angka($spek['disk'] ?? null).'GiB'],
-                'eth0' => ['type' => 'nic', 'name' => 'eth0', 'network' => $cfg['network'], 'ipv4.address' => $cfg['subnet'].'.'.$n],
+                'eth0' => ['type' => 'nic', 'name' => 'eth0', 'network' => $cfg['network'], 'ipv4.address' => $cfg['subnet'].'.'.$n,
+                    'security.port_isolation' => 'true'], // VM pelanggan tak bisa saling menjangkau; vc-edge (.254) tidak diisolasi
                 'agent' => ['type' => 'disk', 'source' => 'agent:config'], // wajib untuk image CentOS/Rocky, aman untuk lainnya
             ],
         ];
@@ -157,12 +158,12 @@ class ProvisionVps implements ShouldQueue
             ->first();
     }
 
-    /** Nomor 2..254 terkecil yang belum pernah dipakai di node ini (VM layanan dibatalkan belum dihapus otomatis). */
+    /** Nomor 2..253 terkecil (.254 = vc-edge) yang belum pernah dipakai di node ini (VM layanan dibatalkan belum dihapus otomatis). */
     private function nomorBebas(Node $node): ?int
     {
         $terpakai = Service::where('node_id', $node->id)->get()
             ->pluck('detail.vm')->filter()->all();
 
-        return collect(range(2, 254))->first(fn ($n) => ! in_array($n, $terpakai));
+        return collect(range(2, 253))->first(fn ($n) => ! in_array($n, $terpakai));
     }
 }

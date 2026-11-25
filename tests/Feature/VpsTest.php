@@ -202,6 +202,51 @@ class VpsTest extends TestCase
         $this->withToken('rahasia')->getJson('/relay/domain')->assertExactJson(['app.contoh.com']); // domain VPS tidak ikut di-proxy ke router PC
     }
 
+    public function test_custom_domain_vps_di_node_ber_ip_publik_lewat_edge_node_sendiri(): void
+    {
+        config(['cloud.relay_token' => 'rahasia']);
+        \Illuminate\Support\Facades\Cache::put('ip-host:matsuba.velocity.ai.id', '202.73.26.2');
+        $node = $this->node();
+        $node->update(['vps_host' => 'matsuba.velocity.ai.id']);
+        $user = User::factory()->create();
+        $planId = $this->plan()->id;
+        $buat = fn (array $detail, string $domain, ?int $nodeId) => Service::create(['user_id' => $user->id, 'plan_id' => $planId, 'label' => 'x',
+            'status' => ServiceStatus::Aktif, 'harga' => 1, 'node_id' => $nodeId, 'detail' => $detail, 'custom_domain' => $domain, 'custom_domain_aktif_at' => now()]);
+        $matsuba = $buat(['host' => 'matsuba.velocity.ai.id', 'ip' => '10.77.0.2'], 'stoothdy.contoh.com', $node->id);
+        $relay = $buat(['host' => 'relay.contoh.id', 'ip' => '10.77.0.2'], 'toko.contoh.com', null); // IP VM sama, node beda
+
+        $this->assertSame('202.73.26.2', $matsuba->ipRelay());
+        $this->withToken('rahasia')->getJson('/relay/domain-vps?host=matsuba.velocity.ai.id')->assertExactJson([['domain' => 'stoothdy.contoh.com', 'ip' => '10.77.0.2']]);
+        $this->withToken('rahasia')->getJson('/relay/domain-vps')->assertExactJson([['domain' => 'toko.contoh.com', 'ip' => '10.77.0.2']]);
+
+        // Periksa DNS membandingkan dengan IP node, bukan IP relay Sumopod
+        $matsuba->update(['custom_domain_aktif_at' => null]);
+        $this->actingAs($user)->post(route('layanan.domain.periksa', $matsuba))->assertRedirect();
+        $this->assertNull($matsuba->fresh()->custom_domain_aktif_at); // domain contoh tidak menunjuk ke mana pun
+    }
+
+    public function test_vm_baru_diisolasi_dan_nomor_254_dicadangkan_untuk_edge(): void
+    {
+        $this->fakeIncus();
+        $node = $this->node(300);
+        $lama = $this->plan('vps-cloud-1');
+        $plan = $this->plan();
+        $pemilik = User::factory()->create();
+        foreach (range(2, 253) as $n) {
+            Service::create(['user_id' => $pemilik->id, 'plan_id' => $lama->id, 'label' => 'x', 'status' => ServiceStatus::Dibatalkan,
+                'harga' => 1, 'node_id' => $node->id, 'detail' => ['vm' => $n]]);
+        }
+        $s = $this->pesanDanLunas($plan)->refresh();
+
+        $this->assertNull($s->detail['vm'] ?? null); // .254 tidak dipakai VM
+        $this->fakeIncus();
+        Service::where('node_id', $node->id)->where('detail->vm', 5)->delete();
+        $s2 = $this->pesanDanLunas($plan)->refresh();
+        $this->assertSame(5, $s2->detail['vm']);
+        Http::assertSent(fn (Request $r) => $r->method() === 'POST' && isset($r['devices']['eth0'])
+            && ($r['devices']['eth0']['security.port_isolation'] ?? null) === 'true');
+    }
+
     public function test_halaman_layanan_vps_menawarkan_domain_milik_dari_vdc(): void
     {
         $user = User::factory()->create();

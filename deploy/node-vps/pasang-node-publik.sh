@@ -12,6 +12,7 @@ CLIENT_CRT=${3:?berkas incus-client.crt dari PC app}
 SUBNET=10.77.0          # sama dengan config cloud.vps.subnet
 PORT_SSH=22000          # node:(22000+N) → VM N port 22
 PORT_EKSTRA=40000       # node:(40000+N*10 … +9) → VM N port yang sama
+EDGE=$SUBNET.254        # container vc-edge (pasang-edge.sh): node:80/443 → edge → VM:80 per custom domain; VM memakai 2..253
 WG_PORT=51830
 NODE_WG=10.79.0.1
 APP_WG=10.79.0.2
@@ -77,20 +78,26 @@ incus config trust list --format csv | grep -qi "${FP:0:12}" || \
   echo "delete table inet velocity_vps"
   echo "table inet velocity_vps {"
   echo "  map ssh { type inet_service : ipv4_addr . inet_service; elements = {"
-  for n in $(seq 2 254); do echo "    $((PORT_SSH + n)) : $SUBNET.$n . 22,"; done
+  for n in $(seq 2 253); do echo "    $((PORT_SSH + n)) : $SUBNET.$n . 22,"; done
   echo "  } }"
   echo "  map ekstra { type inet_service : ipv4_addr; flags interval; elements = {"
-  for n in $(seq 2 254); do echo "    $((PORT_EKSTRA + n * 10))-$((PORT_EKSTRA + n * 10 + 9)) : $SUBNET.$n,"; done
+  for n in $(seq 2 253); do echo "    $((PORT_EKSTRA + n * 10))-$((PORT_EKSTRA + n * 10 + 9)) : $SUBNET.$n,"; done
   echo "  } }"
   cat <<EOF
   chain prerouting {
     type nat hook prerouting priority dstnat; policy accept;
     iifname "$IFACE" ip daddr $PUB_IP dnat ip addr . port to tcp dport map @ssh
     iifname "$IFACE" ip daddr $PUB_IP meta l4proto { tcp, udp } dnat ip to th dport map @ekstra
+    iifname { "$IFACE", "vpsbr0" } ip daddr $PUB_IP tcp dport { 80, 443 } dnat ip to $EDGE comment "custom domain VPS → vc-edge (vpsbr0 = hairpin, VM membuka domainnya sendiri)"
+  }
+  chain postrouting {
+    type nat hook postrouting priority srcnat; policy accept;
+    iifname "vpsbr0" oifname "vpsbr0" ip daddr $EDGE ct status dnat masquerade comment "hairpin: balasan edge kembali lewat node"
   }
   chain forward {
     type filter hook forward priority filter - 1; policy accept;
     ct state established,related accept
+    iifname "vpsbr0" oifname "vpsbr0" ip daddr $EDGE ct status dnat accept comment "hairpin ke vc-edge"
     iifname "vpsbr0" tcp dport 25 reject with tcp reset comment "anti-spam: SMTP keluar diblok"
     iifname "vpsbr0" ip daddr { 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 100.64.0.0/10 } drop comment "VM tidak boleh ke jaringan privat"
     iifname "vpsbr0" oifname "$IFACE" accept

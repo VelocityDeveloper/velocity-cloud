@@ -193,11 +193,12 @@ class LayananController extends Controller
         abort_unless($service->domainLewatRelay() && $service->custom_domain, 422);
 
         $ip = array_column(@dns_get_record($service->custom_domain, DNS_A) ?: [], 'ip');
-        $cocok = $ip === [config('cloud.relay_ip')];
+        $tujuan = $service->ipRelay();
+        $cocok = $ip === [$tujuan];
         $service->update(['custom_domain_aktif_at' => $cocok ? ($service->custom_domain_aktif_at ?? now()) : null]);
         Inertia::flash('toast', $cocok
             ? ['type' => 'success', 'message' => 'DNS sudah benar. SSL diterbitkan otomatis dalam ±1–2 menit.']
-            : ['type' => 'error', 'message' => 'A record belum menunjuk ke '.config('cloud.relay_ip').($ip ? ' (terbaca: '.implode(', ', $ip).')' : '').'. Perubahan DNS bisa butuh beberapa menit.']);
+            : ['type' => 'error', 'message' => 'A record belum menunjuk ke '.$tujuan.($ip ? ' (terbaca: '.implode(', ', $ip).')' : '').'. Perubahan DNS bisa butuh beberapa menit.']);
 
         return back();
     }
@@ -216,10 +217,13 @@ class LayananController extends Controller
     {
         $this->tokenRelay($request);
 
-        return response()->json(Service::with('plan')->where('status', ServiceStatus::Aktif)
+        // Tiap relay hanya menarik VM-nya sendiri (subnet 10.77.0.0/24 sama di semua node): ?host=<vps_host node>, kosong = relay Sumopod.
+        $host = $request->query('host') ?: config('cloud.vps.relay_host');
+
+        return response()->json(Service::with(['plan', 'node'])->where('status', ServiceStatus::Aktif)
             ->whereNotNull('custom_domain_aktif_at')->whereNotNull('custom_domain')
             ->whereHas('plan', fn ($q) => $q->whereIn('kategori', [PlanKategori::Vps, PlanKategori::Managed]))
-            ->get()->filter->domainLewatRelay()
+            ->get()->filter(fn (Service $s) => ($s->detail['host'] ?? null) === $host && $s->domainLewatRelay())
             ->map(fn (Service $s) => ['domain' => $s->custom_domain, 'ip' => $s->detail['ip']])->values());
     }
 

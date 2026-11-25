@@ -57,19 +57,25 @@ class Midtrans
 
         // order_id unik per percobaan (Midtrans menolak order_id yang pernah dipakai); nomor tagihan = bagian sebelum "-" terakhir
         $order = $invoice->nomor.'-'.now()->format('ymdHis');
-        $res = $this->http()->post($this->dasar('app').'/snap/v1/transactions', [
+        $res = $this->snap([
             'transaction_details' => ['order_id' => $order, 'gross_amount' => $invoice->total()],
             'item_details' => [['id' => (string) $invoice->id, 'price' => $invoice->total(), 'quantity' => 1,
                 'name' => Str::limit($invoice->nomor.' '.$invoice->service->label, 50, '')]],
             'customer_details' => ['first_name' => Str::limit($invoice->user->name, 50, ''), 'email' => $invoice->user->email],
             'callbacks' => ['finish' => rtrim(config('app.url'), '/').route('tagihan.show', $invoice, false)],
             'expiry' => ['unit' => 'hours', 'duration' => self::JAM_BERLAKU],
-        ])->throw()->json();
+        ]);
 
         $invoice->forceFill(['midtrans' => ['order' => $order, 'url' => $res['redirect_url'], 'total' => $invoice->total(),
             'sampai' => now()->addHours(self::JAM_BERLAKU)->toIso8601String()]])->save();
 
         return $res['redirect_url'];
+    }
+
+    /** Buat transaksi Snap; dipakai tagihan VDC dan sesi checkout VDC Pay. Balasan berisi token & redirect_url. */
+    public function snap(array $transaksi): array
+    {
+        return $this->http()->post($this->dasar('app').'/snap/v1/transactions', $transaksi)->throw()->json();
     }
 
     /** Status transaksi langsung dari API Midtrans (isi notifikasi tidak dipercaya begitu saja). */

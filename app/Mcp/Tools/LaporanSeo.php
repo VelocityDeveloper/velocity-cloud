@@ -11,7 +11,7 @@ use Laravel\Mcp\Server\Tool;
 use Laravel\Mcp\Server\Tools\Annotations\IsReadOnly;
 
 #[IsReadOnly]
-#[Description('Google Search Console velocitydeveloper.ai.id: klik, tayangan, CTR, posisi vs periode lalu, kata kunci & halaman teratas (25 baris). Data Google terlambat 2-3 hari.')]
+#[Description('Google Search Console velocitydatacenter.com (landing pindah dari velocitydeveloper.ai.id 18 Nov 2026): klik, tayangan, CTR, posisi vs periode lalu, kata kunci & halaman teratas (25 baris). Data Google terlambat 2-3 hari.')]
 class LaporanSeo extends Tool
 {
     public function handle(Request $request, Seo $seo): Response

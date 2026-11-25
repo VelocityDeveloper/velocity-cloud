@@ -3,6 +3,7 @@
 namespace App\Jobs;
 
 use App\Models\Service;
+use App\Services\Provisioning\DirectAdmin;
 use App\Services\Provisioning\Incus;
 use App\Services\Provisioning\NodeAgent;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -22,8 +23,12 @@ class PodAction implements ShouldQueue
         if (! $node) {
             return;
         }
-        $node->jenis === 'incus'
-            ? (new Incus($node))->aksi($this->service->podName(), $this->aksi)
-            : (new NodeAgent($node))->aksi($this->service->podName(), $this->aksi);
+        match ($node->jenis) {
+            // hosting: stop = suspend akun DA (ditangguhkan), start = unsuspend (lunas lagi)
+            'directadmin' => in_array($this->aksi, ['stop', 'start'], true) && isset($this->service->detail['da_user'])
+                ? (new DirectAdmin($node))->suspend($this->service->detail['da_user'], $this->aksi === 'stop') : null,
+            'incus' => (new Incus($node))->aksi($this->service->podName(), $this->aksi),
+            default => (new NodeAgent($node))->aksi($this->service->podName(), $this->aksi),
+        };
     }
 }

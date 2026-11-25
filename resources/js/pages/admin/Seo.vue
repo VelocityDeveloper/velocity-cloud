@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { Head, router } from '@inertiajs/vue3';
-import { computed, ref } from 'vue';
-import GrafikTren from '@/components/analitik/GrafikTren.vue';
+import { computed } from 'vue';
+import GrafikGabungan from '@/components/analitik/GrafikGabungan.vue';
+import type { Seri } from '@/components/analitik/GrafikGabungan.vue';
 import TabelBatang from '@/components/analitik/TabelBatang.vue';
 import PageHeader from '@/components/cloud/PageHeader.vue';
 import { Button } from '@/components/ui/button';
@@ -28,6 +29,7 @@ const props = defineProps<{
               ringkasan_lalu: Ringkasan;
               tren: Tren[];
               tren_lalu: Tren[];
+              pengunjung?: number[];
           } & Record<'kueri' | 'halaman' | 'perangkat' | 'negara', Baris[]>);
 }>();
 
@@ -47,9 +49,19 @@ const kpi = [
     { label: 'Posisi rata-rata', kunci: 'posisi', f: (n: number) => n.toLocaleString('id-ID'), turunBagus: true },
 ] as { label: string; kunci: keyof Ringkasan; f: (n: number) => string; turunBagus?: boolean }[];
 
-const ukuran = ref<keyof Ringkasan>('klik');
-const namaUkuran: Record<keyof Ringkasan, string> = { klik: 'Klik', tayangan: 'Tayangan', ctr: 'CTR (%)', posisi: 'Posisi' };
-const nilai = (t: Tren) => (ukuran.value === 'ctr' ? Math.round(t.ctr * 1000) / 10 : t[ukuran.value]);
+// Warna = palet kategorikal tetap (slot 1-5), urutan jangan diubah agar warna tiap ukuran konsisten
+const seri = computed<Seri[]>(() => {
+    if (!ok.value) return [];
+    const t = ok.value.tren;
+    const posisi = (n: number) => n.toLocaleString('id-ID');
+    return [
+        { nama: 'Klik', warna: '#2a78d6', data: t.map((r) => r.klik), format: angka },
+        { nama: 'Tayangan', warna: '#eb6834', data: t.map((r) => r.tayangan), format: angka },
+        { nama: 'CTR', warna: '#1baf7a', data: t.map((r) => r.ctr), format: persen },
+        { nama: 'Posisi', warna: '#eda100', data: t.map((r) => r.posisi), format: posisi, balik: true },
+        ...(ok.value.pengunjung ? [{ nama: 'Pengunjung situs', warna: '#e87ba4', data: ok.value.pengunjung, format: angka }] : []),
+    ];
+});
 
 const PERANGKAT: Record<string, string> = { MOBILE: 'HP', DESKTOP: 'Desktop', TABLET: 'Tablet' };
 const kolom = [
@@ -92,14 +104,9 @@ const kolom = [
                     </div>
                 </div>
                 <div class="rounded-lg border border-border bg-white p-4">
-                    <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
-                        <h2 class="font-semibold text-ink">Tren harian <span class="text-xs font-normal text-muted-foreground">{{ tanggal(ok.dari) }} – {{ tanggal(ok.sampai) }}</span></h2>
-                        <div class="flex rounded-md border border-border p-0.5 text-sm" role="tablist">
-                            <button v-for="(nama, k) in namaUkuran" :key="k" type="button" role="tab" :aria-selected="ukuran === k" class="rounded px-3 py-1" :class="ukuran === k ? 'bg-brand-700 text-white' : 'text-muted-foreground hover:text-ink'" @click="ukuran = k">{{ nama }}</button>
-                        </div>
-                    </div>
-                    <GrafikTren :label="ok.tren.map((t) => t.label)" :kini="ok.tren.map(nilai)" :lalu="ok.tren_lalu.map(nilai)" :nama="namaUkuran[ukuran]" />
-                    <p v-if="ukuran === 'posisi'" class="mt-2 text-xs text-muted-foreground">Posisi: makin kecil makin baik (1 = teratas).</p>
+                    <h2 class="mb-4 font-semibold text-ink">Tren harian <span class="text-xs font-normal text-muted-foreground">{{ tanggal(ok.dari) }} – {{ tanggal(ok.sampai) }}</span></h2>
+                    <GrafikGabungan :label="ok.tren.map((t) => t.label)" :seri="seri" />
+                    <p class="mt-2 text-xs text-muted-foreground">Tiap garis memakai skalanya sendiri; arahkan kursor untuk angka asli. Posisi dibalik: makin atas makin baik (1 = teratas). Pengunjung situs = analitik landing (tanpa trafik kantor). Klik nama di legenda untuk sembunyikan garis.</p>
                 </div>
             </section>
 

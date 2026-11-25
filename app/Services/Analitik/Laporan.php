@@ -113,13 +113,17 @@ class Laporan
         $data = $this->q($dari, $sampai)
             ->selectRaw("strftime('$format', waktu) AS k, COUNT(DISTINCT vid) AS pengguna, COUNT(DISTINCT sid) AS sesi, COUNT(*) AS tampilan")
             ->groupBy('k')->get()->keyBy('k');
+        $baru = $this->q($dari, $sampai)->where('baru', true)->selectRaw("strftime('$format', waktu) AS k, COUNT(DISTINCT vid) AS n")->groupBy('k')->pluck('n', 'k');
+        $konversi = $this->q($dari, $sampai, 'ev')->whereIn('event', ['klik_pesan', 'klik_wa', 'klik_daftar'])
+            ->selectRaw("strftime('$format', waktu) AS k, COUNT(*) AS n")->groupBy('k')->pluck('n', 'k');
         $hasil = [];
         for ($t = $dari; $t < $sampai; $t = $perJam ? $t->addHour() : $t->addDay()) {
             $k = $perJam ? $t->format('H') : $t->toDateString();
             $d = $data[$k] ?? null;
             $nanti = $t->isFuture(); // jam/hari yang belum terjadi = null agar garis berhenti di "sekarang"
             $nilai = fn ($v) => $nanti ? null : (int) ($v ?? 0);
-            $hasil[] = ['label' => $perJam ? $k.':00' : $k, 'pengguna' => $nilai($d->pengguna ?? null), 'sesi' => $nilai($d->sesi ?? null), 'tampilan' => $nilai($d->tampilan ?? null)];
+            $hasil[] = ['label' => $perJam ? $k.':00' : $k, 'pengguna' => $nilai($d->pengguna ?? null), 'sesi' => $nilai($d->sesi ?? null), 'tampilan' => $nilai($d->tampilan ?? null),
+                'baru' => $nilai($baru[$k] ?? null), 'konversi' => $nilai($konversi[$k] ?? null)];
         }
 
         return $hasil;

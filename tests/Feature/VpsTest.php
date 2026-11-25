@@ -5,10 +5,12 @@ namespace Tests\Feature;
 use App\Actions\Billing\ProsesTagihan;
 use App\Actions\Billing\TandaiLunas;
 use App\Enums\PlanKategori;
+use App\Enums\ServiceStatus;
 use App\Jobs\PodAction;
 use App\Jobs\ProvisionVps;
 use App\Models\Invoice;
 use App\Models\Node;
+use App\Models\Pengaturan;
 use App\Models\Plan;
 use App\Models\Service;
 use App\Models\User;
@@ -88,6 +90,33 @@ class VpsTest extends TestCase
         Http::assertSent(fn (Request $r) => $r->method() === 'PUT' && $r['action'] === 'start');
     }
 
+    public function test_node_ber_ip_publik_memakai_host_node_bukan_relay(): void
+    {
+        $this->fakeIncus();
+        $this->node()->update(['vps_host' => 'matsuba.velocity.ai.id']);
+
+        $s = $this->pesanDanLunas($this->plan())->refresh();
+
+        $this->assertSame(['matsuba.velocity.ai.id', 22002], [$s->detail['host'], $s->detail['host_port']]);
+        $this->assertStringContainsString('ssh root@matsuba.velocity.ai.id -p 22002', $s->detail['akses']);
+        $this->assertStringNotContainsString('relay.contoh.id', $s->detail['akses']);
+    }
+
+    public function test_os_aapanel_memasang_panel_di_port_tambahan_pertama(): void
+    {
+        $this->fakeIncus();
+        $this->node();
+
+        Pengaturan::simpan('vps.os_aktif', ['aapanel-debian-12']);
+        $s = $this->pesanDanLunas($this->plan(), ['os' => 'aapanel-debian-12'])->refresh();
+
+        $sandi = json_decode(Crypt::decryptString($s->detail['kredensial']), true)['sandi'];
+        $buat = collect(Http::recorded())->first(fn ($r) => $r[0]->method() === 'POST' && str_ends_with(parse_url($r[0]->url(), PHP_URL_PATH), '/1.0/instances'))[0];
+        $this->assertSame('debian/12/cloud', $buat['source']['alias']);
+        $this->assertStringContainsString('install-aapanel.sh aapanel -y -P 40020 -u velocity -p '.$sandi, $buat['config']['cloud-init.user-data']);
+        $this->assertStringContainsString('aaPanel: https://relay.contoh.id:40020/'.ProvisionVps::jalurPanel($sandi), $s->detail['akses']);
+    }
+
     public function test_tanpa_node_atau_paket_bukan_otomatis_tetap_manual(): void
     {
         Http::fake();
@@ -153,5 +182,39 @@ class VpsTest extends TestCase
         $s = $this->pesanDanLunas($this->plan());
         $this->assertSame('disiapkan', $s->fresh()->status->value);
         Http::assertNothingSent();
+    }
+    public function test_custom_domain_vps_di_belakang_relay_masuk_daftar_relay_vps(): void
+    {
+        config(['cloud.relay_token' => 'rahasia']);
+        $user = User::factory()->create();
+        $vps = Service::create(['user_id' => $user->id, 'plan_id' => $this->plan()->id, 'label' => 'x', 'status' => ServiceStatus::Aktif, 'harga' => 1,
+            'detail' => ['host' => 'relay.contoh.id', 'ip' => '10.77.0.2'], 'custom_domain' => 'toko.contoh.com', 'custom_domain_aktif_at' => now()]);
+        $publik = Service::create(['user_id' => $user->id, 'plan_id' => $vps->plan_id, 'label' => 'y', 'status' => ServiceStatus::Aktif, 'harga' => 1,
+            'detail' => ['host' => '202.73.26.2', 'ip' => '10.77.0.3'], 'custom_domain' => 'lain.contoh.com', 'custom_domain_aktif_at' => now()]);
+        $app = Plan::create(['kategori' => PlanKategori::App, 'slug' => 'app-x', 'nama' => 'App', 'harga' => 1]);
+        Service::create(['user_id' => $user->id, 'plan_id' => $app->id, 'label' => 'z', 'status' => ServiceStatus::Aktif, 'harga' => 1,
+            'custom_domain' => 'app.contoh.com', 'custom_domain_aktif_at' => now()]);
+
+        $this->assertTrue($vps->domainLewatRelay());
+        $this->assertFalse($publik->domainLewatRelay());
+        $this->getJson('/relay/domain-vps')->assertUnauthorized();
+        $this->withToken('rahasia')->getJson('/relay/domain-vps')->assertExactJson([['domain' => 'toko.contoh.com', 'ip' => '10.77.0.2']]);
+        $this->withToken('rahasia')->getJson('/relay/domain')->assertExactJson(['app.contoh.com']); // domain VPS tidak ikut di-proxy ke router PC
+    }
+
+    public function test_halaman_layanan_vps_menawarkan_domain_milik_dari_vdc(): void
+    {
+        $user = User::factory()->create();
+        $vps = Service::create(['user_id' => $user->id, 'plan_id' => $this->plan()->id, 'label' => 'x', 'status' => ServiceStatus::Aktif, 'harga' => 1,
+            'detail' => ['host' => 'relay.contoh.id', 'ip' => '10.77.0.2']]);
+        $domain = Plan::create(['kategori' => PlanKategori::Domain, 'slug' => 'domain', 'nama' => 'Domain', 'harga' => 0]);
+        Service::create(['user_id' => $user->id, 'plan_id' => $domain->id, 'label' => 'd', 'status' => ServiceStatus::Aktif, 'harga' => 1, 'detail' => ['domain' => 'tokosaya.com']]);
+        Service::create(['user_id' => $user->id, 'plan_id' => $domain->id, 'label' => 'd2', 'status' => ServiceStatus::Disiapkan, 'harga' => 1, 'detail' => ['domain' => 'belum.com']]);
+        Service::create(['user_id' => User::factory()->create()->id, 'plan_id' => $domain->id, 'label' => 'd3', 'status' => ServiceStatus::Aktif, 'harga' => 1, 'detail' => ['domain' => 'orang.com']]);
+
+        $this->actingAs($user)->get(route('layanan.show', $vps))->assertInertia(fn ($p) => $p
+            ->where('domain_saya', ['tokosaya.com'])->where('layanan.domain_relay', true));
+        $this->actingAs($user)->put(route('layanan.domain', $vps), ['domain' => 'www.tokosaya.com'])->assertRedirect();
+        $this->assertSame('www.tokosaya.com', $vps->fresh()->custom_domain);
     }
 }

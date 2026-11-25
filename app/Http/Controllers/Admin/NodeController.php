@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Enums\ServiceStatus;
 use App\Http\Controllers\Controller;
 use App\Models\Node;
+use App\Services\Metrik\Riwayat;
 use App\Services\Provisioning\DirectAdmin;
 use App\Services\Provisioning\Incus;
 use App\Services\Provisioning\NodeAgent;
@@ -21,8 +22,21 @@ class NodeController extends Controller
     {
         return Inertia::render('admin/Node', [
             'node' => Node::withCount(['services' => fn ($q) => $q->whereIn('status', [ServiceStatus::Aktif, ServiceStatus::Ditangguhkan])])
-                ->orderBy('nama')->get(['id', 'nama', 'jenis', 'agent_url', 'da_user', 'kapasitas_pod', 'ram_pod_mb', 'aktif']),
+                ->orderBy('nama')->get(['id', 'nama', 'jenis', 'agent_url', 'vps_host', 'da_user', 'kapasitas_pod', 'ram_pod_mb', 'aktif']),
             'jenis' => Node::JENIS,
+        ]);
+    }
+
+    /** Detail mesin node: sampel per menit dari metrik:ambil (baru node pod). Rentang grafik lewat partial reload. */
+    public function show(Request $request, Node $node): Response
+    {
+        return Inertia::render('admin/NodeShow', [
+            'node' => [...$node->only('id', 'nama', 'jenis', 'agent_url', 'kapasitas_pod', 'ram_pod_mb', 'aktif'),
+                'jenis_nama' => Node::JENIS[$node->jenis] ?? $node->jenis,
+                'layanan' => $node->services()->whereIn('status', [ServiceStatus::Aktif, ServiceStatus::Ditangguhkan])->count()],
+            'terkini' => $node->metrik()->latest('waktu')->first(['waktu', 'cpu', 'inti', 'ram', 'ram_total', 'disk', 'disk_total', 'load', 'uptime']),
+            'riwayat' => fn () => Riwayat::titik($node->metrik()->getQuery(), (string) $request->query('rentang', '24j'),
+                ['cpu', 'ram', 'ram_total', 'disk', 'disk_total', 'load'], ['rx', 'tx']),
         ]);
     }
 
@@ -82,6 +96,8 @@ class NodeController extends Controller
             'jenis' => ['required', Rule::in(array_keys(Node::JENIS))],
             'da_user' => ['nullable', 'required_if:jenis,directadmin', 'regex:/^[a-z][a-z0-9_]{1,59}$/'],
             'agent_url' => ['required', 'url:http,https', 'max:255'],
+            // incus: host SSH/port tambahan VPS di node ini (node ber-IP publik); kosong = relay global VPS_RELAY_HOST.
+            'vps_host' => ['nullable', 'string', 'max:255', 'regex:/^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$/i'],
             // incus: sertifikat server PEM dari skrip pasang-node.sh (dipakai memverifikasi node, bukan rahasia).
             'token' => [$baru ? 'required' : 'nullable', 'string', 'min:32', $request->input('jenis') === 'incus' ? 'max:5000' : 'max:255', ...($request->input('jenis') === 'incus' ? ['starts_with:-----BEGIN CERTIFICATE-----'] : [])],
             'kapasitas_pod' => ['required', 'integer', 'min:1', 'max:1000'],

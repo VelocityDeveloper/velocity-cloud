@@ -58,4 +58,22 @@ class AgenDiskusiTest extends TestCase
         $this->actingAs(User::factory()->create(['is_admin' => true]))->get('/admin/agen?jenis=masalah')->assertOk()
             ->assertInertia(fn (AssertableInertia $p) => $p->component('admin/Agen')->where('terbuka', 1)->has('catatan', 2));
     }
+
+    public function test_review_harian_dipisah_dari_masalah_dan_bisa_ditutup_admin(): void
+    {
+        $id = $this->withToken('rahasia-uji')->postJson('/internal/agen/diskusi', [
+            'judul' => 'Review 24 Nov 2026', 'isi' => 'Ringkasan harian', 'agen' => 'Dudung', 'status' => 'terbuka',
+        ])->assertCreated()->json('id');
+
+        $c = AgenCatatan::find($id);
+        $this->assertSame('review', $c->jenis);
+
+        $admin = User::factory()->create(['is_admin' => true]);
+        $this->actingAs($admin)->get('/admin/agen?jenis=review')->assertOk()
+            ->assertInertia(fn (AssertableInertia $p) => $p->where('terbuka', 0)->where('review_terbuka', 1)->has('catatan', 1));
+
+        $this->actingAs($admin)->post(route('admin.agen.selesai', $c), ['ringkasan' => 'Sudah dicek'])->assertRedirect();
+        $this->assertSame('fix', $c->fresh()->status);
+        $this->assertSame('Sudah dicek', $c->fresh()->ringkasan);
+    }
 }

@@ -17,7 +17,7 @@ class ProsesTagihan
         $cfg = config('cloud.tagihan');
 
         $terbit = 0;
-        Service::where('status', ServiceStatus::Aktif)
+        Service::with('plan')->where('status', ServiceStatus::Aktif)
             ->whereDate('jatuh_tempo', '<=', today()->addDays($cfg['terbit_hari_sebelum']))
             ->whereDoesntHave('invoices', fn ($q) => $q->where('status', InvoiceStatus::BelumDibayar))
             ->each(function (Service $s) use (&$terbit) {
@@ -28,7 +28,7 @@ class ProsesTagihan
                     'jumlah' => $s->harga,
                     'status' => InvoiceStatus::BelumDibayar,
                     'periode_mulai' => $s->jatuh_tempo,
-                    'periode_selesai' => $s->jatuh_tempo->copy()->addMonthNoOverflow(),
+                    'periode_selesai' => $s->jatuh_tempo->copy()->addMonthsNoOverflow($s->plan->kategori->bulanSiklus()),
                     'jatuh_tempo' => $s->jatuh_tempo,
                 ]));
                 $terbit++;
@@ -40,7 +40,7 @@ class ProsesTagihan
                 ->whereDate('jatuh_tempo', '<', today()->subDays($cfg['tangguhkan_hari_sesudah'])))
             ->each(function (Service $s) use (&$ditangguhkan) {
                 $s->update(['status' => ServiceStatus::Ditangguhkan]);
-                if ($s->bisaKontrol()) {
+                if ($s->ikutDitangguhkan()) {
                     PodAction::dispatch($s, 'stop');
                 }
                 $ditangguhkan++;

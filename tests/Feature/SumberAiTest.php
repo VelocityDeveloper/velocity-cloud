@@ -61,7 +61,7 @@ class SumberAiTest extends TestCase
     {
         $admin = User::factory()->create(['is_admin' => true]);
         $this->plan(); // model publik-1 sudah ada
-        $data = ['nama' => 'DeepSeek V4.1 Pro', 'model' => 'deepseek-v4.1-pro', 'harga' => 12000, 'sumber_url' => 'https://api.contoh.com/v1/', 'sumber_model' => 'deepseek-reasoner', 'sumber_key' => 'sk-baru'];
+        $data = ['nama' => 'DeepSeek V4.1 Pro', 'model' => 'deepseek-v4.1-pro', 'harga' => 12000, 'harga_input' => 3000, 'harga_cache' => 300, 'provider' => 'DeepSeek', 'sumber_url' => 'https://api.contoh.com/v1/', 'sumber_model' => 'deepseek-reasoner', 'sumber_key' => 'sk-baru'];
 
         $this->actingAs(User::factory()->create())->post('/admin/paket/ai', $data)->assertForbidden();
         $this->actingAs($admin)->post('/admin/paket/ai', ['model' => 'Ada Spasi'] + $data)->assertSessionHasErrors('model');
@@ -73,6 +73,7 @@ class SumberAiTest extends TestCase
         $this->assertFalse($plan->aktif);
         $this->assertSame(12000, $plan->harga);
         $this->assertSame('deepseek-v4.1-pro', $plan->spek['model']);
+        $this->assertSame('DeepSeek', $plan->spek['provider']);
         $this->assertSame(['url' => 'https://api.contoh.com/v1', 'model' => 'deepseek-reasoner', 'key' => 'sk-baru'], $plan->sumber);
         $this->actingAs($admin)->post('/admin/paket/ai', $data)->assertSessionHasErrors('model'); // kembar
     }

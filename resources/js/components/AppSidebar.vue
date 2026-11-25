@@ -4,7 +4,7 @@ import {
     Bot,
     Boxes,
     ChartLine,
-    CreditCard,
+    BookOpen,
     LayoutGrid,
     LifeBuoy,
     MessageSquare,
@@ -16,6 +16,7 @@ import {
     ShoppingCart,
     Users,
     Wallet,
+    Gift,
 } from '@lucide/vue';
 import { computed } from 'vue';
 import AppLogo from '@/components/AppLogo.vue';
@@ -33,6 +34,7 @@ import {
 import { chat, dashboard } from '@/routes';
 import admin from '@/routes/admin';
 import customer from '@/routes/customer';
+import domain from '@/routes/domain';
 import katalog from '@/routes/katalog';
 import layanan from '@/routes/layanan';
 import tagihan from '@/routes/tagihan';
@@ -52,20 +54,40 @@ const mainNavItems: NavItem[] = [
             { title: 'App 1-Klik', href: katalog.index('app') },
             { title: 'Cloud Server', href: katalog.index('cloud') },
             { title: 'Managed Server', href: katalog.index('managed-cloud') },
+            { title: 'Shared Hosting', href: katalog.index('hosting') },
+            { title: 'Domain', href: domain.index() },
             { title: 'Token AI', href: katalog.index('ai') },
         ],
     },
     { title: 'Layanan Saya', href: layanan.index(), icon: Server },
     { title: 'Chat AI', href: chat(), icon: MessageSquare },
     { title: 'Tagihan', href: tagihan.index(), icon: Receipt },
+    { title: 'Panduan', href: '/panduan', icon: BookOpen },
     { title: 'Support Ticket', href: tiket.index(), icon: LifeBuoy },
 ];
 
 const adminNavItems = computed<NavItem[]>(() => [
     { title: 'Dashboard Admin', href: dashboard(), icon: LayoutGrid },
-    { title: 'Tagihan', href: admin.tagihan.index(), icon: CreditCard },
-    { title: 'Pembayaran', href: admin.pembayaran.index(), icon: Wallet },
-    { title: 'Tiket', href: admin.tiket.index(), icon: LifeBuoy, badge: page.props.tiketTerbuka },
+    {
+        title: 'Pembayaran',
+        href: admin.tagihan.index(),
+        icon: Wallet,
+        items: [
+            { title: 'Tagihan', href: admin.tagihan.index() },
+            { title: 'Pengaturan', href: admin.pembayaran.index() },
+        ],
+    },
+    { title: 'Promo', href: admin.promo.index(), icon: Gift },
+    {
+        title: 'Support',
+        href: admin.tiket.index(),
+        icon: LifeBuoy,
+        badge: page.props.tiketTerbuka,
+        items: [
+            { title: 'Tiket', href: admin.tiket.index() },
+            { title: 'Email', href: admin.email.index() },
+        ],
+    },
     { title: 'Layanan', href: admin.layanan.index(), icon: Package },
     {
         title: 'Paket',
@@ -74,17 +96,34 @@ const adminNavItems = computed<NavItem[]>(() => [
         items: [
             { title: 'Cloud Server', href: admin.paket.index('vps') },
             { title: 'Managed Server', href: admin.paket.index('managed') },
+            { title: 'Shared Hosting', href: admin.paket.index('hosting') },
             { title: 'App', href: admin.paket.index('app') },
             { title: 'Token AI', href: admin.paket.index('ai') },
+            { title: 'Domain', href: admin.paketDomain.index() },
         ],
     },
-    { title: 'Node', href: admin.node.index(), icon: ServerCog },
+    {
+        title: 'Node',
+        href: admin.node.index(),
+        icon: ServerCog,
+        items: [
+            { title: 'List Node', href: admin.node.index() },
+            { title: 'Setting VPS', href: admin.settingVps.index() },
+        ],
+    },
     { title: 'Pengguna', href: admin.pengguna.index(), icon: Users },
     { title: 'Analitik', href: admin.analitik.index(), icon: ChartLine },
-    { title: 'SEO', href: admin.seo.index(), icon: Search },
+    {
+        title: 'SEO',
+        href: admin.seo.index(),
+        icon: Search,
+        items: [
+            { title: 'Ringkasan', href: admin.seo.index() },
+            { title: 'Keyword Mapping', href: admin.seo.peta() },
+        ],
+    },
     { title: 'Agent', href: admin.agen.index(), icon: Bot },
 ]);
-
 </script>
 
 <template>

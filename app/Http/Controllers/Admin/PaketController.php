@@ -5,7 +5,9 @@ namespace App\Http\Controllers\Admin;
 use App\Actions\Katalog\UbahPaket;
 use App\Enums\PlanKategori;
 use App\Http\Controllers\Controller;
+use App\Jobs\DeployLanding;
 use App\Models\Plan;
+use App\Services\Katalog\HargaLanding;
 use App\Services\TokenAi\LaporanToken;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -23,7 +25,7 @@ class PaketController extends Controller
 
         return Inertia::render('admin/Paket', [
             'kategori' => ['value' => $kategori->value, 'label' => $kategori->label()],
-            'paket' => Plan::where('kategori', $kategori)->withCount(['services as terpakai' => fn ($q) => $q->whereIn('status', Plan::STATUS_PAKAI_STOK)])
+            'paket' => Plan::where('kategori', $kategori)->withCount(['services as terpakai' => fn ($q) => $q->whereIn('status', Plan::STATUS_PAKAI_STOK), 'services as layanan'])
                 ->orderBy('urutan')->get()
                 ->map(fn (Plan $p) => [
                     'id' => $p->id,
@@ -34,8 +36,11 @@ class PaketController extends Controller
                     'aktif' => $p->aktif,
                     'stok' => $p->stok,
                     'terpakai' => $p->terpakai,
+                    'layanan' => $p->layanan, // semua status; > 0 = tidak bisa dihapus
                     'bisa_dipesan' => $p->bisaDipesan(),
                     'spek' => $p->spek,
+                    'promo_berlaku' => $p->hargaPromo() !== null,
+                    'pod' => $p->limitPod(),
                     // API key tak pernah dikirim ke browser
                     'sumber' => $p->kategori === PlanKategori::Ai ? [
                         'url' => $p->sumber['url'] ?? null,
@@ -54,13 +59,51 @@ class PaketController extends Controller
             'harga' => ['nullable', 'integer', 'min:0', 'max:100000000'],
             'aktif' => ['required', 'boolean'],
             'stok' => ['nullable', 'integer', 'min:0', 'max:100000'],
+            // Spek opsional: tidak dikirim (saklar on/off) = tetap. App = limit pod (angka), VPS/Managed = teks landing.
+            ...match ($plan->kategori) {
+                PlanKategori::App => $plan->limitPod() ? [
+                    'cpu' => ['sometimes', 'numeric', 'min:0.25', 'max:16', 'multiple_of:0.25'],
+                    'ram_mb' => ['required_with:cpu', 'integer', 'min:128', 'max:65536'],
+                    'disk_gb' => ['required_with:cpu', 'integer', 'min:1', 'max:2000'], // informasi, belum dibatasi per pod
+                ] : [],
+                // Token AI: harga = output; input & cache per 1 jt token. Tidak dikirim (saklar on/off) = tetap.
+                PlanKategori::Ai => [
+                    'harga_input' => ['sometimes', 'nullable', 'integer', 'min:0', 'max:100000000'],
+                    'harga_cache' => ['sometimes', 'nullable', 'integer', 'min:0', 'max:100000000'],
+                    'provider' => ['sometimes', 'nullable', 'string', 'max:50'], // pembuat model, mis. Anthropic, OpenAI
+                    // Harga promo = harga beli saldo per 1 jt selama periode (WIB, kosong = tanpa batas)
+                    'harga_promo' => ['sometimes', 'nullable', 'integer', 'min:0', 'lt:harga'],
+                    'promo_mulai' => ['sometimes', 'nullable', 'date_format:Y-m-d\\TH:i'],
+                    'promo_selesai' => ['sometimes', 'nullable', 'date_format:Y-m-d\\TH:i', 'after_or_equal:promo_mulai'],
+                ],
+                PlanKategori::Vps, PlanKategori::Managed => [
+                    // VPS otomatis membaca angka pertama teks ini untuk limit VM (ProvisionVps)
+                    'cpu' => ['sometimes', 'string', 'max:50', 'regex:/\d/'],
+                    'ram' => ['required_with:cpu', 'string', 'max:50', 'regex:/\d/'],
+                    'disk' => ['required_with:cpu', 'string', 'max:50', 'regex:/\d/'],
+                    'bandwidth' => ['nullable', 'string', 'max:50'],
+                ],
+                default => [],
+            },
+        ], [
+            'regex' => 'Wajib berisi angka, mis. 2 GB.',
+            'harga_promo.lt' => 'Harga promo harus lebih murah dari harga output.',
+            'promo_selesai.after_or_equal' => 'Tanggal selesai harus sesudah tanggal mulai.',
         ]);
 
+        $spek = match (true) {
+            // hanya kunci yang dikirim; null = kunci dihapus (UbahPaket)
+            $plan->kategori === PlanKategori::Ai => array_intersect_key($data, array_flip(['harga_input', 'harga_cache', 'provider', 'harga_promo', 'promo_mulai', 'promo_selesai'])) ?: null,
+            ! isset($data['cpu']) => null,
+            $plan->kategori === PlanKategori::App => ['cpu' => (float) $data['cpu'] == (int) $data['cpu'] ? (int) $data['cpu'] : (float) $data['cpu'], 'ram_mb' => (int) $data['ram_mb'], 'disk_gb' => isset($data['disk_gb']) ? (int) $data['disk_gb'] : null],
+            default => ['cpu' => trim($data['cpu']), 'ram' => trim($data['ram']), 'disk' => trim($data['disk']), 'bandwidth' => trim($data['bandwidth'] ?? '')],
+        };
         $situsBerubah = $ubah->handle(
             $plan,
             isset($data['harga']) ? (int) $data['harga'] : null,
             (bool) $data['aktif'],
             isset($data['stok']) ? (int) $data['stok'] : null,
+            $spek,
         );
         Inertia::flash('toast', ['type' => 'success', 'message' => $situsBerubah
             ? 'Paket disimpan. Situs diperbarui dalam ±1 menit.'
@@ -75,7 +118,10 @@ class PaketController extends Controller
         $data = $request->validate([
             'nama' => ['required', 'string', 'max:100'],
             'model' => ['required', 'string', 'max:100', 'regex:/^[a-z0-9][a-z0-9._-]*$/'],
-            'harga' => ['required', 'integer', 'min:0', 'max:100000000'],
+            'harga' => ['required', 'integer', 'min:0', 'max:100000000'], // output
+            'harga_input' => ['required', 'integer', 'min:0', 'max:100000000'],
+            'harga_cache' => ['required', 'integer', 'min:0', 'max:100000000'],
+            'provider' => ['nullable', 'string', 'max:50'],
             'ringkas' => ['nullable', 'string', 'max:300'],
             'sumber_url' => ['required', 'url:https,http', 'max:300'],
             'sumber_model' => ['required', 'string', 'max:200'],
@@ -97,12 +143,30 @@ class PaketController extends Controller
             'aktif' => false,
             'urutan' => (int) Plan::where('kategori', PlanKategori::Ai)->max('urutan') + 1,
             // bentuk sama dengan paket dari katalog:sync
-            'spek' => ['model' => $data['model'], 'satuan' => '1 juta token'],
-            'fitur' => ['API kompatibel OpenAI', 'Saldo prabayar, tanpa masa berlaku', 'Input & output harga sama'],
+            'spek' => array_filter(['model' => $data['model'], 'satuan' => '1 juta token', 'provider' => $data['provider'] ?? null, 'harga_input' => $data['harga_input'], 'harga_cache' => $data['harga_cache']], fn ($v) => $v !== null),
+            'fitur' => Plan::FITUR_AI,
             'ringkas' => ($data['ringkas'] ?? null) ?: 'Token AI prabayar untuk model '.$data['nama'].' lewat API kompatibel OpenAI.',
             'sumber' => ['url' => rtrim($data['sumber_url'], '/'), 'model' => trim($data['sumber_model']), 'key' => trim($data['sumber_key'])],
         ]);
         Inertia::flash('toast', ['type' => 'success', 'message' => 'Paket AI dibuat (Off). Klik Uji, lalu nyalakan agar tampil di katalog.']);
+
+        return back();
+    }
+
+    /** Hapus paket token AI yang belum pernah dipakai layanan apa pun (services.plan_id restrict); yang sudah dipakai cukup dimatikan. */
+    public function destroy(Plan $plan, HargaLanding $landing): RedirectResponse
+    {
+        abort_unless($plan->kategori === PlanKategori::Ai, 404);
+        if ($n = $plan->services()->count()) {
+            throw ValidationException::withMessages(['hapus' => "Paket dipakai $n layanan, tidak bisa dihapus. Matikan (Off) saja."]);
+        }
+
+        $diLanding = $landing->hapus($plan); // tulis JSON dulu: gagal = DB tidak berubah
+        $plan->delete();
+        if ($diLanding) {
+            DeployLanding::dispatch();
+        }
+        Inertia::flash('toast', ['type' => 'success', 'message' => "Paket {$plan->nama} dihapus.".($diLanding ? ' Situs diperbarui dalam ±1 menit.' : '')]);
 
         return back();
     }

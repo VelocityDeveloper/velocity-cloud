@@ -15,7 +15,7 @@ use Inertia\Response;
 class KatalogController extends Controller
 {
     /** Segmen URL /katalog/{kategori} → nilai PlanKategori (dipakai juga sub-menu sidebar). */
-    public const KATEGORI_URL = ['app' => 'app', 'cloud' => 'vps', 'managed-cloud' => 'managed', 'ai' => 'ai'];
+    public const KATEGORI_URL = ['app' => 'app', 'cloud' => 'vps', 'managed-cloud' => 'managed', 'hosting' => 'hosting', 'ai' => 'ai'];
 
     public function index(?string $kategori = null): Response
     {
@@ -23,6 +23,7 @@ class KatalogController extends Controller
             // Varian tambahan (mis. WordPress Plus) dipilih di halaman pesan app induk, tidak tampil sebagai baris sendiri.
             'paket' => Plan::aktif()->orderBy('kategori')->orderBy('urutan')->get()->reject(fn (Plan $p) => $p->varianTambahan())->values()->map(Tampil::plan(...)),
             'kategori' => self::KATEGORI_URL[$kategori ?? 'app'],
+            'promo' => self::promoAktif(),
         ]);
     }
 
@@ -43,21 +44,33 @@ class KatalogController extends Controller
             'domain_app' => config('cloud.domain_app'),
             'beli_maks_juta' => config('cloud.token_ai.beli_maks_juta'),
             'endpoint_ai' => config('cloud.token_ai.endpoint'),
-            'pilihan_os' => $plan->vpsOtomatis() ? collect(config('cloud.vps.os'))->map(fn ($o) => $o['nama']) : null,
+            'promo' => self::promoAktif(),
+            'pilihan_os' => $plan->vpsOtomatis() ? collect(\App\Models\Pengaturan::osVps())->map(fn ($o) => $o['nama']) : null,
         ]);
+    }
+
+    private static function promoAktif(): array
+    {
+        return \App\Models\Promo::berlaku()->get()->map(fn ($p) => [
+            ...$p->only('nama', 'bonus_token_juta', 'min_pembelian', 'kategori'),
+            'selesai' => $p->selesai?->toIso8601String(),
+        ])->all();
     }
 
     public function store(Request $request, Plan $plan, BuatPesanan $buat): RedirectResponse
     {
         abort_unless($plan->bisaDipesan(), 422, $plan->sisaStok() === 0 ? 'Stok paket ini habis.' : 'Paket ini belum bisa dipesan.');
 
+        $hosting = $plan->kategori === PlanKategori::Hosting;
+        $request->merge(['domain' => strtolower(trim((string) $request->input('domain')))]);
         $data = $request->validate([
+            'domain' => $hosting ? ['required', ...\App\Models\Service::aturanDomain()] : ['prohibited'],
             'label' => ['nullable', 'string', 'max:60'], // field dihapus dari form 13 Nov; kosong = nama paket
             'token_juta' => [Rule::requiredIf($plan->kategori === PlanKategori::Ai), 'nullable', 'integer', 'min:1', 'max:'.config('cloud.token_ai.beli_maks_juta')],
-            'os' => [Rule::requiredIf($plan->vpsOtomatis()), 'nullable', Rule::in(array_keys(config('cloud.vps.os')))],
-        ]);
+            'os' => [Rule::requiredIf($plan->vpsOtomatis()), 'nullable', Rule::in(array_keys(\App\Models\Pengaturan::osVps()))],
+        ], \App\Models\Service::PESAN_DOMAIN);
 
-        $invoice = $buat->handle($request->user(), $plan, $data['label'] ?? $plan->nama, $plan->kategori === PlanKategori::Ai ? (int) $data['token_juta'] : null, $plan->vpsOtomatis() ? ['os' => $data['os']] : []);
+        $invoice = $buat->handle($request->user(), $plan, $data['label'] ?? $plan->nama, $plan->kategori === PlanKategori::Ai ? (int) $data['token_juta'] : null, $plan->vpsOtomatis() ? ['os' => $data['os']] : [], $hosting ? $data['domain'] : null);
         Inertia::flash('toast', ['type' => 'success', 'message' => 'Pesanan dibuat. Silakan selesaikan pembayaran.']);
 
         return to_route('tagihan.show', $invoice);

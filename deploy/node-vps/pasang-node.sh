@@ -58,7 +58,10 @@ incus config set core.https_address "$LAN_IP:8443"
 
 # 4. Project terbatas untuk app + sertifikat app (restricted ke project itu saja).
 if ! incus project show "$PROJECT" >/dev/null 2>&1; then
-  incus project create "$PROJECT" -c features.images=false -c features.profiles=false
+  incus project create "$PROJECT" -c features.images=false
+  # project restricted wajib punya profil sendiri: salin root disk + nic dari default
+  incus profile device add default root disk path=/ pool=default --project "$PROJECT"
+  incus profile device add default eth0 nic network=incusbr0 name=eth0 --project "$PROJECT"
 fi
 incus project set "$PROJECT" restricted=true restricted.devices.nic=managed restricted.devices.disk=managed \
   restricted.virtual-machines.lowlevel=block restricted.containers.privilege=unprivileged

@@ -36,7 +36,7 @@ class ChatAlatTest extends TestCase
     public function test_definisi_alat_dan_ringkasan(): void
     {
         $this->assertSame('daftar_layanan', AlatLayanan::definisi()[0]['function']['name']);
-        $this->assertSame(['aksi_layanan', 'wp', 'perintah_vps', 'tulis_berkas'], AlatLayanan::KONFIRMASI);
+        $this->assertSame(['aksi_layanan', 'wp', 'perintah_vps', 'tulis_berkas', 'pesan_domain', 'ubah_nameserver'], AlatLayanan::KONFIRMASI);
         $this->assertSame('restart layanan #3', AlatLayanan::ringkas('aksi_layanan', ['id' => 3, 'aksi' => 'restart']));
         $this->assertSame('Tambah ke wp-content/uploads/a.html (2 KB, WordPress #5)', AlatLayanan::ringkas('tulis_berkas', ['id' => 5, 'path' => 'uploads/a.html', 'isi' => str_repeat('x', 1500), 'tambah' => true]));
         $this->assertSame('wp plugin list  (WordPress)', AlatLayanan::ringkas('wp', ['args' => ['plugin', 'list', ['bukan teks']]]));

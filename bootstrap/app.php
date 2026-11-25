@@ -19,7 +19,7 @@ return Application::configure(basePath: dirname(__DIR__))
         // Pengunjung lewat http:// (header dari Cloudflare) dialihkan ke https agar password tidak terkirim polos.
         $middleware->prepend(\App\Http\Middleware\PaksaHttps::class);
 
-        $middleware->encryptCookies(except: ['appearance', 'sidebar_state', 'vc_masuk']);
+        $middleware->encryptCookies(except: ['appearance', 'sidebar_state', 'vc_masuk', 'vc_vid']);
 
         $middleware->web(append: [
             HandleAppearance::class,

@@ -3,6 +3,7 @@ import { Head, Link, usePage } from '@inertiajs/vue3';
 import {
     Activity,
     AppWindow,
+    BookOpen,
     Bot,
     CalendarClock,
     Globe,
@@ -10,6 +11,7 @@ import {
     Plus,
     Server,
     ServerCog,
+    Settings2,
     Tag,
     Wallet,
 } from '@lucide/vue';
@@ -37,7 +39,7 @@ const props = defineProps<{
 const angka = (n: number) => n.toLocaleString('id-ID');
 const page = usePage();
 const namaDepan = computed(() => page.props.auth.user?.name?.split(' ')[0] ?? '');
-const waLink = (teks: string) => `https://wa.me/${page.props.whatsapp}?text=${encodeURIComponent(teks)}`;
+const waLink = (teks: string) => `https://wa.me/${page.props.whatsapp}?text=${encodeURIComponent(`${teks} -vc`)}`;
 
 // Ringkasan dihitung dari data yang sudah ada di halaman (tanpa angka karangan).
 const aktif = computed(() => props.layanan.filter((l) => l.status === 'aktif').length);
@@ -56,6 +58,7 @@ const kategori = [
     { judul: 'App 1-Klik', isi: 'n8n, WordPress, WAHA, dan app lain siap pakai tanpa setup server.', url: 'app', ikon: AppWindow },
     { judul: 'Cloud Server', isi: 'VPS dengan akses root penuh untuk Anda kelola sendiri.', url: 'cloud', ikon: Server },
     { judul: 'Managed Server', isi: 'Server dikelola tim Velocity Developer: setup, update, dan pemantauan.', url: 'managed-cloud', ikon: ServerCog },
+    { judul: 'Shared Hosting', isi: 'Hosting website dengan panel DirectAdmin, mulai 1 GB, bayar tahunan.', url: 'hosting', ikon: Globe },
     { judul: 'Token AI', isi: 'API model AI format OpenAI dengan saldo prabayar tanpa masa berlaku.', url: 'ai', ikon: Bot },
 ];
 </script>
@@ -67,11 +70,16 @@ const kategori = [
             :title="namaDepan ? `Halo, ${namaDepan}` : 'Dashboard'"
             description="Ringkasan layanan dan tagihan Anda."
         >
-            <Button as-child
-                ><Link :href="katalog.index()"
-                    ><Plus aria-hidden="true" />Pesan Layanan</Link
-                ></Button
-            >
+            <div class="flex flex-wrap gap-2">
+                <Button as-child variant="outline"
+                    ><Link href="/panduan"><BookOpen aria-hidden="true" />Panduan</Link></Button
+                >
+                <Button as-child
+                    ><Link :href="katalog.index()"
+                        ><Plus aria-hidden="true" />Pesan Layanan</Link
+                    ></Button
+                >
+            </div>
         </PageHeader>
 
         <!-- Pengguna baru: arahkan langsung ke kategori, bukan tabel kosong. -->
@@ -99,7 +107,7 @@ const kategori = [
             <p class="text-sm text-muted-foreground">
                 Masih ragu?
                 <a
-                    :href="waLink('Halo, saya mau konsultasi layanan Velocity Cloud.')"
+                    :href="waLink('Halo, saya mau konsultasi layanan Velocity Data Center.')"
                     target="_blank"
                     rel="noopener"
                     class="font-semibold text-brand-700 hover:text-brand-600"
@@ -264,6 +272,7 @@ const kategori = [
                                     ><Wallet class="size-4 text-brand-700" aria-hidden="true" />Harga</span
                                 >
                             </th>
+                            <th class="text-right"><span class="sr-only">Aksi</span></th>
                         </tr>
                     </thead>
                     <tbody>
@@ -294,7 +303,12 @@ const kategori = [
                             </td>
                             <td>{{ tanggal(l.jatuh_tempo) }}</td>
                             <td class="text-right">
-                                {{ rupiah(l.harga) }}<span class="text-muted-foreground">{{ l.kategori === 'ai' ? '/jt token' : '/bln' }}</span>
+                                {{ rupiah(l.harga) }}<span class="text-muted-foreground">{{ l.kategori === 'ai' ? '/jt token' : l.kategori === 'hosting' ? '/thn' : l.kategori === 'domain' ? '' : '/bln' }}</span>
+                            </td>
+                            <td class="text-right">
+                                <Button size="sm" variant="outline" as-child>
+                                    <Link :href="layananRoute.show(l.id)"><Settings2 aria-hidden="true" />Kelola</Link>
+                                </Button>
                             </td>
                         </tr>
                     </tbody>

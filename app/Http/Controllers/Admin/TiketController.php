@@ -12,7 +12,7 @@ class TiketController extends Controller
 {
     public function index(Request $request): Response
     {
-        $status = $request->query('status', 'terbuka');
+        $status = $request->query('status', 'semua');
 
         return Inertia::render('admin/Tiket', [
             'status' => $status,

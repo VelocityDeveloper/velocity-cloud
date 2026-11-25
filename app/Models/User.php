@@ -35,6 +35,20 @@ class User extends Authenticatable implements PasskeyUser
     /** @use HasFactory<UserFactory> */
     use HasFactory, Notifiable, PasskeyAuthenticatable, TwoFactorAuthenticatable;
 
+    /** Cookie vid analitik yang ditulis landing di domain induk (.velocitydatacenter.com). */
+    public const COOKIE_VID = 'vc_vid';
+
+    protected static function booted(): void
+    {
+        // Daftar biasa maupun Google: tautkan akun ke pengunjung landing agar sumber trafik terlihat di Admin › Pengguna.
+        static::creating(function (self $user) {
+            $vid = request()->cookie(self::COOKIE_VID);
+            if (! $user->analitik_vid && is_string($vid) && preg_match('/^[a-z0-9]{8,24}$/', $vid)) {
+                $user->analitik_vid = $vid;
+            }
+        });
+    }
+
     /**
      * Get the attributes that should be cast.
      *

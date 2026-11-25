@@ -10,7 +10,7 @@ import tiketRoute from '@/routes/tiket';
 import type { Tiket } from '@/types';
 
 defineOptions({
-    layout: { breadcrumbs: [{ title: 'Admin · Tiket', href: admin.tiket.index() }] },
+    layout: { breadcrumbs: [{ title: 'Admin · Support · Tiket', href: admin.tiket.index() }] },
 });
 defineProps<{ status: string; pilihan: { value: string; label: string }[]; tiket: Tiket[] }>();
 </script>

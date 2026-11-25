@@ -6,6 +6,8 @@ import DataTable from "@/components/cloud/DataTable.vue";
 import PageHeader from "@/components/cloud/PageHeader.vue";
 import StatusBadge from "@/components/cloud/StatusBadge.vue";
 import TombolSalin from "@/components/cloud/TombolSalin.vue";
+import VdcPayAdmin from "@/components/cloud/VdcPayAdmin.vue";
+import type { VdcPay } from "@/components/cloud/VdcPayAdmin.vue";
 import InputError from "@/components/InputError.vue";
 import { Button } from "@/components/ui/button";
 import {
@@ -34,7 +36,7 @@ type Metode = {
 };
 defineOptions({
     layout: {
-        breadcrumbs: [{ title: "Admin · Pembayaran", href: admin.pembayaran.index() }],
+        breadcrumbs: [{ title: "Admin · Pengaturan Pembayaran", href: admin.pembayaran.index() }],
     },
 });
 type Midtrans = {
@@ -43,7 +45,7 @@ type Midtrans = {
     kunci_akhir: string | null; // 4 karakter akhir server key; null = belum diisi
     url_notifikasi: string;
 };
-const props = defineProps<{ metode: Metode[]; jenis: Record<Jenis, string>; midtrans: Midtrans }>();
+const props = defineProps<{ metode: Metode[]; jenis: Record<Jenis, string>; midtrans: Midtrans; vdcpay: VdcPay }>();
 
 // Server key tidak pernah dikirim balik ke browser: kosong = tetap pakai kunci lama
 const fm = useForm({ server_key: "", produksi: props.midtrans.produksi, aktif: props.midtrans.aktif });
@@ -114,10 +116,10 @@ const labelNomor: Record<Jenis, string> = {
 </script>
 
 <template>
-    <Head title="Admin · Pembayaran" />
+    <Head title="Admin · Pengaturan Pembayaran" />
     <div class="space-y-6 p-4 md:p-6">
         <PageHeader
-            title="Pembayaran"
+            title="Pengaturan Pembayaran"
             description="Metode yang tampil di halaman tagihan pelanggan. Setelah pelanggan membayar, tandai lunas di menu Tagihan."
         >
             <Button @click="buka({})">Tambah Metode</Button>
@@ -175,6 +177,8 @@ const labelNomor: Record<Jenis, string> = {
                 </div>
             </form>
         </section>
+
+        <VdcPayAdmin :vdcpay="vdcpay" />
 
         <h2 class="font-semibold text-ink">Transfer manual</h2>
         <DataTable

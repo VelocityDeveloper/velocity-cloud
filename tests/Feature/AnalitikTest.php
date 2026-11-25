@@ -39,6 +39,10 @@ class AnalitikTest extends TestCase
         $this->assertSame(['newsletter', 'email'], $p->sumber('https://www.google.com/', 'Newsletter', 'Email'));
 
         $this->assertTrue($p->urai($this->baris(['e' => 'pv'], ip: '9.9.9.9'))['internal']);
+        $pCidr = new Pengurai(['36.65.0.0/16'], ['vidujibot01']);
+        $this->assertTrue($pCidr->urai($this->baris(['e' => 'pv'], ip: '36.65.12.34'))['internal']);
+        $this->assertFalse($pCidr->urai($this->baris(['e' => 'pv'], ip: '36.66.12.34'))['internal']);
+        $this->assertTrue($pCidr->urai($this->baris(['e' => 'pv', 'vid' => 'vidujibot01'], ip: '1.2.3.4'))['internal']);
         $this->assertNull($p->urai($this->baris(['e' => 'pv'], 'Googlebot/2.1')));
         $this->assertNull($p->urai($this->baris(['e' => 'pv', 'vid' => '<script>'])));
         $this->assertNull($p->urai($this->baris(['e' => 'xx'])));
@@ -95,7 +99,7 @@ class AnalitikTest extends TestCase
         $this->assertSame('Indonesia', $l['negara'][0]['nama']);
         $this->assertSame('klik_pesan', $l['event'][0]['event']);
         $this->assertCount(24, $l['tren']);
-        $this->assertSame(2, $l['tren'][9]['pengguna']);
+        $this->assertSame(['label' => '09:00', 'pengguna' => 2, 'sesi' => 2, 'tampilan' => 3, 'baru' => 2, 'konversi' => 1], $l['tren'][9]);
         $this->assertNull($l['tren'][13]['pengguna']); // jam 13 belum terjadi (kini 12:00)
     }
 

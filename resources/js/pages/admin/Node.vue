@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Head, router, useForm } from "@inertiajs/vue3";
+import { Head, Link, router, useForm } from "@inertiajs/vue3";
 import { PlugZap } from "@lucide/vue";
 import { ref } from "vue";
 import NodeController from "@/actions/App/Http/Controllers/Admin/NodeController";
@@ -25,6 +25,7 @@ type NodeRow = {
     nama: string;
     jenis: "pod" | "incus" | "directadmin";
     agent_url: string;
+    vps_host: string | null;
     da_user: string | null;
     kapasitas_pod: number;
     ram_pod_mb: number | null;
@@ -52,6 +53,7 @@ const f = useForm({
     nama: "",
     jenis: "pod" as NodeRow["jenis"],
     agent_url: "",
+    vps_host: "",
     da_user: "",
     token: "",
     kapasitas_pod: 20,
@@ -65,6 +67,7 @@ function buka(n: Partial<NodeRow>) {
         nama: n.nama ?? "",
         jenis: n.jenis ?? "pod",
         agent_url: n.agent_url ?? "",
+        vps_host: n.vps_host ?? "",
         da_user: n.da_user ?? "",
         token: "",
         kapasitas_pod: n.kapasitas_pod ?? 20,
@@ -120,7 +123,13 @@ function uji(n: NodeRow) {
             </thead>
             <tbody>
                 <tr v-for="n in node" :key="n.id">
-                    <td class="font-semibold text-ink">{{ n.nama }}</td>
+                    <td class="font-semibold text-ink">
+                        <Link
+                            :href="admin.node.show(n.id)"
+                            class="hover:underline"
+                            >{{ n.nama }}</Link
+                        >
+                    </td>
                     <td>
                         {{ { directadmin: "DirectAdmin", incus: "VPS (Incus)", pod: "Pod" }[n.jenis] }}
                     </td>
@@ -130,6 +139,10 @@ function uji(n: NodeRow) {
                             v-if="n.da_user"
                             class="block text-muted-foreground"
                             >user {{ n.da_user }}</span
+                        ><span
+                            v-if="n.vps_host"
+                            class="block text-muted-foreground"
+                            >akses VPS {{ n.vps_host }}</span
                         >
                     </td>
                     <td class="text-right">
@@ -219,6 +232,19 @@ function uji(n: NodeRow) {
                             :placeholder="contohUrl[f.jenis]"
                         />
                         <InputError :message="f.errors.agent_url" />
+                    </div>
+                    <div v-if="f.jenis === 'incus'" class="grid gap-2">
+                        <Label for="vps_host">Host akses VPS</Label>
+                        <Input
+                            id="vps_host"
+                            v-model="f.vps_host"
+                            placeholder="Kosong = relay (VPS_RELAY_HOST)"
+                            autocomplete="off"
+                        />
+                        <p class="text-xs text-muted-foreground">
+                            Isi untuk node ber-IP publik (pasang-node-publik.sh): pelanggan SSH ke host ini, bukan ke relay.
+                        </p>
+                        <InputError :message="f.errors.vps_host" />
                     </div>
                     <div v-if="f.jenis === 'directadmin'" class="grid gap-2">
                         <Label for="da_user">User DirectAdmin</Label>

@@ -32,9 +32,11 @@ class LaporanToken
         ];
     }
 
-    private function q(Carbon $dari, Carbon $sampai)
+    /** $tokenAi diisi = tampilan pelanggan: hanya miliknya dan hanya request sukses. */
+    private function q(Carbon $dari, Carbon $sampai, ?int $tokenAi = null)
     {
-        return DB::table('token_ai_pemakaian')->whereBetween('token_ai_pemakaian.created_at', [$dari->toDateTimeString(), $sampai->toDateTimeString()]);
+        return DB::table('token_ai_pemakaian')->whereBetween('token_ai_pemakaian.created_at', [$dari->toDateTimeString(), $sampai->toDateTimeString()])
+            ->when($tokenAi, fn ($q) => $q->where('token_ai_id', $tokenAi)->where('status', 200));
     }
 
     private function ringkasan(Carbon $dari, Carbon $sampai): array
@@ -60,9 +62,9 @@ class LaporanToken
     }
 
     /** Satu baris per hari (termasuk hari tanpa pemakaian) agar dua periode bisa disejajarkan. */
-    private function tren(Carbon $dari, int $hari): array
+    public function tren(Carbon $dari, int $hari, ?int $tokenAi = null): array
     {
-        $data = $this->q($dari, $dari->copy()->addDays($hari)->subSecond())
+        $data = $this->q($dari, $dari->copy()->addDays($hari)->subSecond(), $tokenAi)
             ->selectRaw('date(created_at) d, count(*) request, coalesce(sum(total), 0) token, coalesce(sum(cache_hit), 0) cache_hit')
             ->groupBy('d')->get()->keyBy('d');
 

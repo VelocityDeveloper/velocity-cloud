@@ -28,6 +28,11 @@ class Node extends Model
         return $this->hasMany(Service::class);
     }
 
+    public function metrik(): HasMany
+    {
+        return $this->hasMany(NodeMetrik::class);
+    }
+
     /**
      * Sisa RAM (MB) terbesar untuk satu pod baru di node pod aktif, dicek saat pesan agar pesanan tidak gagal setelah lunas (#16).
      * Per node: ram_pod_mb dikurangi limit RAM layanan app di node itu; lalu dikurangi jatah pesanan yang belum punya node

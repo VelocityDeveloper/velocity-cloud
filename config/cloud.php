@@ -1,7 +1,7 @@
 <?php
 
 /*
-| Konfigurasi Velocity Cloud.
+| Konfigurasi Velocity Data Center.
 | pods: spesifikasi container per app (kunci = slug di apps.json landing). Image null = belum bisa dipesan.
 | Variabel {sandi} dan {sandi_db} diganti sandi acak per layanan saat provisioning (ditampilkan ke pelanggan);
 | {rahasia} juga acak tapi tidak ditampilkan; {email} = email pelanggan. 'pengguna' (opsional) = username login app, ditampilkan.
@@ -32,12 +32,17 @@ return [
     // App pelanggan = <acak>.velocitydeveloper.ai.id (DNS wildcard → tunnel → router nginx :8188 → pod). Nama yang sudah dipakai situs dicadangkan.
     'domain_app' => env('CLOUD_DOMAIN_APP', 'velocitydeveloper.ai.id'),
     'subdomain_cadangan' => ['www', 'app', 'ai', 'api', 'admin', 'mail', 'dash', 'panel', 'blog', 'status', 'docs', 'cdn', 'static', 'assets', 'mx', 'smtp', 'imap', 'ns1', 'ns2', 'ftp', 'cpanel', 'webmail'],
-    'whatsapp' => env('CLOUD_WHATSAPP', '6285600566674'),
+    // Custom domain app: relay HTTPS di VPS Sumopod (nginx + certbot) → WireGuard → router nginx PC :8188.
+    // Pelanggan mengarahkan A record ke relay_ip; relay menarik daftar domain aktif dari /relay/domain memakai relay_token.
+    'relay_ip' => env('CLOUD_RELAY_IP', '43.159.35.76'),
+    'relay_token' => env('CLOUD_RELAY_TOKEN'),
+    'whatsapp' => env('CLOUD_WHATSAPP', '6282131939422'),
 
     // Analitik landing: log beacon nginx (lihat /etc/nginx/conf.d/velocitydeveloper-ai-id.conf) diimpor tiap menit.
     'analitik' => [
         'log' => env('CLOUD_ANALITIK_LOG', '/var/log/nginx/velocitydeveloper-analitik.log'),
-        'ip_internal' => array_filter(explode(',', env('CLOUD_ANALITIK_IP_INTERNAL', ''))), // IP kantor
+        'ip_internal' => array_filter(explode(',', env('CLOUD_ANALITIK_IP_INTERNAL', ''))), // IP/CIDR kantor
+        'ddns_internal' => env('CLOUD_ANALITIK_DDNS_INTERNAL', 'ip-kantor.velocity.ai.id'), // DDNS IP dinamis kantor (Indibiz)
         'simpan_hari' => 400,
     ],
 
@@ -47,7 +52,11 @@ return [
 
     'gsc' => [
         'kredensial' => env('GSC_KREDENSIAL', '/etc/velocity/secrets/gsc-velocitydeveloper-co.json'),
-        'situs' => env('GSC_SITUS', 'sc-domain:velocitydeveloper.ai.id'),
+        'situs' => env('GSC_SITUS', 'sc-domain:velocitydatacenter.com'),
+        // backlog riset kata kunci bot Kang SEO (tabel markdown) → Admin › SEO › Keyword Mapping
+        'riset_kata_kunci' => env('GSC_RISET_KATA_KUNCI', '/srv/velocity-bot/4b25d5fb8f/riset-kata-kunci.md'),
+        // kata kunci negatif (satu per baris), diatur dari Keyword Mapping, dibaca juga oleh Kang SEO saat riset
+        'kata_negatif' => env('GSC_KATA_NEGATIF', '/srv/velocity-bot/4b25d5fb8f/kata-negatif.txt'),
     ],
 
     // Token AI prabayar (13 Nov). Paket dibuat katalog:sync bila belum ada; harga/aktif sesudahnya diatur di Admin › Paket.
@@ -68,16 +77,29 @@ return [
         'port_ssh' => 22000, // SSH = relay:(port_ssh + N)
         'port_ekstra' => 40000, // port bebas = relay:(port_ekstra + N*10) s/d +9 → VM port yang sama
         'project' => 'velocity',
-        'network' => 'incusbr0',
+        'network' => 'vpsbr0', // bridge khusus VM pelanggan (incusbr0 dipakai VM lain di node)
         'pool' => 'default',
         'client_cert' => env('VPS_INCUS_CERT', '/etc/velocity/secrets/incus-client.crt'),
         'client_key' => env('VPS_INCUS_KEY', '/etc/velocity/secrets/incus-client.key'),
         'paket' => ['vps-cloud-1', 'vps-cloud-2', 'vps-cloud-3'], // dibuat otomatis; paket lain tetap manual (pemasok)
         'image_server' => 'https://images.linuxcontainers.org',
+        // Urutan & penamaan mengikuti Sumopod (25 Nov). OpenCloudOS, CentOS 7, Debian 10/11 tidak ada image VM di images.linuxcontainers.org.
         'os' => [
-            'ubuntu-24.04' => ['nama' => 'Ubuntu 24.04 LTS', 'alias' => 'ubuntu/24.04/cloud'],
-            'debian-12' => ['nama' => 'Debian 12', 'alias' => 'debian/12/cloud'],
+            'ubuntu-24.04' => ['nama' => 'Ubuntu Server 24.04 LTS 64bit', 'alias' => 'ubuntu/24.04/cloud'],
+            'ubuntu-22.04' => ['nama' => 'Ubuntu Server 22.04 LTS 64bit', 'alias' => 'ubuntu/22.04/cloud'],
+            'centos-stream-9' => ['nama' => 'CentOS Stream 9 64bit', 'alias' => 'centos/9-Stream/cloud'],
+            'debian-12' => ['nama' => 'Debian 12 64bit', 'alias' => 'debian/12/cloud'],
+            'rocky-9' => ['nama' => 'Rocky Linux 9 64bit', 'alias' => 'rockylinux/9/cloud'],
+            'ubuntu-26.04' => ['nama' => 'Ubuntu Server 26.04 LTS 64bit', 'alias' => 'ubuntu/26.04/cloud'],
+            'debian-13' => ['nama' => 'Debian 13 64bit', 'alias' => 'debian/13/cloud'],
+            // aaPanel dipasang cloud-init (±5-10 mnt sesudah aktif; uji matsuba 2 mnt) di port tambahan pertama VM; login velocity + sandi root (aaPanel menolak admin/root).
+            'aapanel-debian-12' => ['nama' => 'aaPanel (Debian 12)', 'alias' => 'debian/12/cloud', 'aapanel' => true],
         ],
+    ],
+
+    // Email masuk support@ → tiket (tiket:ambil-email tiap menit, IMAP lewat scripts/ambil-email.py). Kosong/tak terbaca = mati.
+    'tiket_email' => [
+        'kredensial' => env('TIKET_EMAIL_KREDENSIAL', '/etc/velocity/secrets/smtp_velocitydatacenter_support'),
     ],
 
     // Chat AI kelola layanan (app/Services/Chat/AlatLayanan.php): kunci Pexels dipakai bersama installer, cek-blok = validator markup blok installer.
@@ -93,6 +115,16 @@ return [
         'terbit_hari_sebelum' => 7,  // tagihan perpanjangan terbit H-7 jatuh tempo
         'tangguhkan_hari_sesudah' => 3, // layanan ditangguhkan H+3 jika belum lunas
         'jatuh_tempo_hari' => 3,     // batas bayar tagihan pesanan baru
+    ],
+
+    // Jualan domain: harga & pembelian lewat API publik CRM new-vdnet (satu PC, nginx :8174). Perpanjangan ditagih CRM.
+    'crm' => [
+        'url' => env('CRM_API_URL', 'http://127.0.0.1:8174/api/api/public'),
+        'key' => env('CRM_API_KEY'),
+        'sumber' => 'app.velocitydatacenter.com', // dicatat di order CRM bersama nomor tagihan (kunci idempoten)
+        // kelola domain milik customer (nameserver dsb.): API panel customer-vdnet CRM, header vdnet-key = CUSTOMER_VDNET_KEY CRM
+        'customer_url' => env('CRM_CUSTOMER_URL', 'http://127.0.0.1:8174/api/api/customer-vdnet'),
+        'customer_key' => env('CRM_CUSTOMER_KEY'),
     ],
 
     'pods' => [
@@ -238,6 +270,23 @@ return [
                     'volume' => '/home/node/.openclaw'],
             ],
             'limit' => $limit('openclaw'),
+        ],
+        '9router' => [
+            // Image resmi decolua/9router (Next.js, port 20128, data SQLite di /app/data). Login dashboard = sandi saja (INITIAL_PASSWORD;
+            // tanpa env ini sandi bawaan 123456). REQUIRE_API_KEY: /v1 tanpa API key = 401, karena endpoint terbuka ke internet.
+            // API_KEY_SECRET = HMAC API key buatan pelanggan (bawaan publik di repo); env pod tetap sama saat restart, jadi key tetap sah.
+            'port' => 20128,
+            'containers' => [
+                ['name' => '9router', 'image' => 'docker.io/decolua/9router:0.5.123', 'env' => [
+                    'INITIAL_PASSWORD' => '{sandi}',
+                    'API_KEY_SECRET' => '{rahasia}',
+                    'REQUIRE_API_KEY' => 'true',
+                    'AUTH_COOKIE_SECURE' => 'true',
+                    'NEXT_PUBLIC_BASE_URL' => 'https://{host}',
+                    'TZ' => 'Asia/Jakarta',
+                ], 'volume' => '/app/data'],
+            ],
+            'limit' => $limit('9router'),
         ],
     ],
 ];

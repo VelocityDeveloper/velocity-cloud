@@ -2,8 +2,10 @@
 
 namespace App\Console\Commands;
 
+use App\Models\Pengaturan;
 use App\Services\Analitik\Pengurai;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 
@@ -24,7 +26,20 @@ class ImporAnalitik extends Command
 
             return self::SUCCESS;
         }
-        $pengurai = new Pengurai(config('cloud.analitik.ip_internal'));
+        $ipInternal = array_values(array_filter(config('cloud.analitik.ip_internal', [])));
+        $ddns = trim((string) config('cloud.analitik.ddns_internal', ''));
+        if ($ddns !== '' && ! app()->runningUnitTests()) {
+            $ipDdns = Cache::remember('analitik:ddns:'.$ddns, 300, static function () use ($ddns): ?string {
+                $hasil = @gethostbyname($ddns);
+
+                return filter_var($hasil, FILTER_VALIDATE_IP) ? $hasil : null;
+            });
+            if ($ipDdns) {
+                $ipInternal[] = $ipDdns;
+            }
+        }
+        $vidInternal = Pengaturan::ambil('analitik.vid_internal', []);
+        $pengurai = new Pengurai($ipInternal, is_array($vidInternal) ? $vidInternal : []);
         $posisi = json_decode(Storage::get(self::POSISI) ?? '{}', true) ?: [];
         $inode = fileinode($log);
         $total = 0;

@@ -12,7 +12,7 @@
         'PlusJakartaSans', ui-sans-serif, system-ui, sans-serif;
     --font-heading: 'Sora', 'PlusJakartaSans', ui-sans-serif, system-ui, sans-serif;
 
-    /* Token brand Velocity Cloud (sumber: /brand/ di landing, src/data/brand.json) */
+    /* Token brand Velocity Data Center (sumber: /brand/ di landing, src/data/brand.json) */
     --color-ink: #0b2a3f;
     --color-brand-50: #eef4f8;
     --color-brand-100: #d8e5ee;

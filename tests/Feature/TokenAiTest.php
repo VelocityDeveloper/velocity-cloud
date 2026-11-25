@@ -108,4 +108,36 @@ class TokenAiTest extends TestCase
             ->where('token_ai.0.kuota', 10_000_000)
             ->where('token_ai.0.persen', 25));
     }
+
+    public function test_halaman_layanan_menampilkan_grafik_pemakaian_milik_sendiri_dan_sukses_saja(): void
+    {
+        $user = User::factory()->create();
+        $plan = $this->plan();
+        $service = \App\Models\Service::create(['user_id' => $user->id, 'plan_id' => $plan->id, 'label' => 'chatbot', 'status' => \App\Enums\ServiceStatus::Aktif, 'harga' => 5000]);
+        $t = $service->tokenAi()->create(['kunci_hash' => str_repeat('b', 64), 'saldo' => 1_000_000, 'terpakai' => 0]);
+        $lain = \App\Models\Service::create(['user_id' => User::factory()->create()->id, 'plan_id' => $plan->id, 'label' => 'x', 'status' => \App\Enums\ServiceStatus::Aktif, 'harga' => 5000]);
+        $tLain = $lain->tokenAi()->create(['kunci_hash' => str_repeat('c', 64), 'saldo' => 1_000_000, 'terpakai' => 0]);
+        $baris = fn ($id, $status, $total, $waktu) => \Illuminate\Support\Facades\DB::table('token_ai_pemakaian')->insert(['token_ai_id' => $id, 'model' => 'm', 'prompt' => $total, 'completion' => 0, 'total' => $total, 'status' => $status, 'created_at' => $waktu]);
+        $baris($t->id, 200, 100, now());
+        $baris($t->id, 200, 50, now());
+        $baris($t->id, 502, 0, now());
+        $baris($tLain->id, 200, 999, now());
+        $baris($t->id, 200, 30, now()->subDays(35));
+
+        $this->actingAs($user)->get(route('layanan.show', $service))->assertInertia(fn ($page) => $page
+            ->has('token.tren', 30)
+            ->where('token.tren.29.token', 150)
+            ->where('token.tren.29.request', 2)
+            ->where('token.tren_lalu.24.token', 30));
+
+        // Detail pemakaian: potong saldo (3 harga) & biaya memakai harga paket saat ini, bukan harga layanan saat dipesan
+        \Illuminate\Support\Facades\DB::table('token_ai_pemakaian')->insert(['token_ai_id' => $t->id, 'model' => 'm', 'prompt' => 5000, 'cache_hit' => 4000, 'completion' => 10, 'total' => 5010, 'potong' => 1000, 'status' => 200, 'created_at' => now()]);
+        $plan->update(['harga' => 28500]);
+        $this->actingAs($user)->get(route('layanan.show', $service))->assertInertia(fn ($page) => $page
+            ->where('token.harga', 28500)
+            ->where('token.pemakaian.0.cache_hit', 4000)
+            ->where('token.pemakaian.0.potong', 1000)
+            ->where('token.pemakaian.0.biaya', 28.5)
+            ->where('token.pemakaian.1.potong', 30)); // baris lama tanpa potong = total
+    }
 }

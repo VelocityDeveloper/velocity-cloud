@@ -8,6 +8,7 @@ use App\Enums\InvoiceStatus;
 use App\Enums\PlanKategori;
 use App\Enums\ServiceStatus;
 use App\Jobs\PodAction;
+use App\Jobs\ProvisionHosting;
 use App\Jobs\ProvisionPod;
 use App\Models\Invoice;
 use App\Models\Node;
@@ -175,6 +176,116 @@ class CloudTest extends TestCase
 
         app(TandaiLunas::class)->handle($telat->invoices()->sole(), 'transfer');
         $this->assertSame(ServiceStatus::Aktif, $telat->fresh()->status);
+    }
+
+    public function test_hosting_wajib_domain_dan_ditagih_tahunan(): void
+    {
+        Queue::fake();
+        $user = User::factory()->create();
+        $plan = $this->plan('hosting-hosting-1-gb', PlanKategori::Hosting, 700000);
+
+        $this->actingAs($user)->post(route('katalog.store', $plan))->assertSessionHasErrors('domain');
+        $this->actingAs($user)->post(route('katalog.store', $plan), ['domain' => 'bukan domain'])->assertSessionHasErrors('domain');
+        $this->actingAs($user)->post(route('katalog.store', $this->plan()), ['domain' => 'contoh.com'])->assertSessionHasErrors('domain'); // selain hosting ditolak
+
+        $this->actingAs($user)->post(route('katalog.store', $plan), ['domain' => ' Contoh.COM '])->assertRedirect();
+        $service = Service::sole();
+        $this->assertSame('contoh.com', $service->custom_domain);
+        $invoice = $service->invoices()->sole();
+        $this->assertSame(700000, (int) $invoice->jumlah);
+        $this->assertTrue($invoice->periode_selesai->equalTo(today()->addYear()));
+
+        app(TandaiLunas::class)->handle($invoice, 'transfer');
+        $this->assertSame(ServiceStatus::Disiapkan, $service->fresh()->status);
+        Queue::assertPushed(ProvisionHosting::class); // akun DirectAdmin dibuat job
+
+        $service->update(['status' => ServiceStatus::Aktif, 'jatuh_tempo' => today()->addDays(3)]);
+        app(ProsesTagihan::class)->handle();
+        $this->assertTrue($service->invoices()->latest('id')->first()->periode_selesai->equalTo(today()->addDays(3)->addYear()));
+    }
+
+    public function test_provision_hosting_membuat_akun_directadmin(): void
+    {
+        $plan = Plan::create(['kategori' => PlanKategori::Hosting, 'slug' => 'hosting-hosting-5-gb', 'nama' => 'Hosting 5 GB', 'harga' => 3500000, 'spek' => ['disk' => '5 GB']]);
+        $user = User::factory()->create(['email' => 'pelanggan@contoh.com']);
+        $service = Service::create(['user_id' => $user->id, 'plan_id' => $plan->id, 'label' => 'x', 'status' => ServiceStatus::Disiapkan, 'harga' => 3500000, 'custom_domain' => 'toko-baju.co.id']);
+        Service::create(['user_id' => $user->id, 'plan_id' => $plan->id, 'label' => 'y', 'status' => ServiceStatus::Disiapkan, 'harga' => 1, 'detail' => ['da_user' => 'tokobaju']]); // sedang dibuat layanan lain
+        $node = Node::create(['nama' => 'sanke', 'jenis' => 'directadmin', 'agent_url' => 'https://da.test:2222', 'da_user' => 'admin', 'token' => str_repeat('k', 64), 'kapasitas_pod' => 100]);
+        $teks = ['Content-Type' => 'text/plain'];
+        Http::fake([
+            'da.test:2222/CMD_API_USER_EXISTS*' => fn ($r) => Http::response('error=0&exists='.(str_contains($r->url(), 'user=admin') ? 1 : 0), 200, $teks),
+            'da.test:2222/CMD_API_SHOW_USER_CONFIG*' => Http::response('ip=157.66.55.81&ns1=ns1.velocitydeveloper.net&ns2=ns2.velocitydeveloper.net', 200, $teks),
+            'da.test:2222/CMD_API_ACCOUNT_USER' => Http::sequence()->push('error=1&text=Cannot%20Create%20Account&details=Domain%20exists', 200, $teks)->push('error=0&text=User%20created', 200, $teks),
+        ]);
+
+        try {
+            (new ProvisionHosting($service))->handle();
+            $this->fail('error DA harus jadi exception');
+        } catch (\RuntimeException $e) {
+            $this->assertStringContainsString('Domain exists', $e->getMessage());
+        }
+        $akun = json_decode(\Illuminate\Support\Facades\Crypt::decryptString($service->fresh()->detail['kredensial']), true);
+        $this->assertMatchesRegularExpression('/^tokobaju\d{2}$/', $akun['pengguna']); // tokobaju dipakai layanan lain
+
+        (new ProvisionHosting($service))->handle(); // percobaan ulang: username & sandi sama
+        $s = $service->fresh();
+        $this->assertSame(ServiceStatus::Aktif, $s->status);
+        $this->assertSame($node->id, $s->node_id);
+        $this->assertSame($akun, json_decode(\Illuminate\Support\Facades\Crypt::decryptString($s->detail['kredensial']), true));
+        $this->assertStringContainsString('ns1.velocitydeveloper.net', $s->detail['akses']);
+        Http::assertSent(fn ($r) => str_ends_with($r->url(), '/CMD_API_ACCOUNT_USER') && $r['username'] === $akun['pengguna'] && $r['passwd'] === $akun['sandi']
+            && $r['domain'] === 'toko-baju.co.id' && $r['package'] === 'velocity_5000mb' && $r['ip'] === '157.66.55.81' && $r['email'] === 'pelanggan@contoh.com' && $r['notify'] === 'no');
+        $this->assertSame('u123abcd', ProvisionHosting::usernameDasar('123abcdefg.com'));
+    }
+
+    public function test_hosting_ditangguhkan_suspend_akun_da_dan_lunas_unsuspend(): void
+    {
+        Queue::fake();
+        $plan = Plan::create(['kategori' => PlanKategori::Hosting, 'slug' => 'hosting-hosting-1-gb', 'nama' => 'Hosting 1 GB', 'harga' => 700000, 'spek' => ['disk' => '1 GB']]);
+        $user = User::factory()->create();
+        $node = Node::create(['nama' => 'sanke', 'jenis' => 'directadmin', 'agent_url' => 'https://da.test:2222', 'da_user' => 'admin', 'token' => str_repeat('k', 64), 'kapasitas_pod' => 100]);
+        $s = Service::create(['user_id' => $user->id, 'plan_id' => $plan->id, 'label' => 'x', 'status' => ServiceStatus::Aktif, 'harga' => 700000, 'jatuh_tempo' => today()->subDays(5), 'node_id' => $node->id, 'detail' => ['da_user' => 'contoh']]);
+        Invoice::create(['user_id' => $user->id, 'service_id' => $s->id, 'nomor' => 'INV-H', 'jumlah' => 700000, 'status' => InvoiceStatus::BelumDibayar, 'periode_mulai' => today()->subDays(5), 'periode_selesai' => today()->addYear(), 'jatuh_tempo' => today()->subDays(5)]);
+
+        $this->assertSame([0, 1], app(ProsesTagihan::class)->handle());
+        $this->assertSame(ServiceStatus::Ditangguhkan, $s->fresh()->status);
+        Queue::assertPushed(PodAction::class, fn ($j) => $j->aksi === 'stop' && $j->service->is($s));
+
+        $teks = ['Content-Type' => 'text/plain'];
+        $status = 'yes';
+        Http::fake([
+            'da.test:2222/CMD_API_SELECT_USERS' => Http::response('error=0&text=ok', 200, $teks),
+            'da.test:2222/CMD_API_SHOW_USER_CONFIG*' => function () use (&$status, $teks) { return Http::response("suspended=$status", 200, $teks); },
+        ]);
+        (new PodAction($s->fresh(), 'stop'))->handle();
+        Http::assertSent(fn ($r) => str_ends_with($r->url(), '/CMD_API_SELECT_USERS') && $r['dosuspend'] === 'yes' && $r['select0'] === 'contoh');
+
+        app(TandaiLunas::class)->handle($s->invoices()->sole(), 'transfer');
+        $this->assertSame(ServiceStatus::Aktif, $s->fresh()->status);
+        Queue::assertPushed(PodAction::class, fn ($j) => $j->aksi === 'start');
+        $status = 'no';
+        (new PodAction($s->fresh(), 'start'))->handle();
+        Http::assertSent(fn ($r) => str_ends_with($r->url(), '/CMD_API_SELECT_USERS') && ($r['dounsuspend'] ?? null) === 'yes');
+
+        $status = 'yes'; // DA tidak berubah → gagal, job dicoba ulang
+        $this->expectException(\RuntimeException::class);
+        (new PodAction($s->fresh(), 'start'))->handle();
+    }
+
+    public function test_admin_tangguhkan_manual_ikut_hentikan_resource(): void
+    {
+        Queue::fake();
+        $plan = Plan::create(['kategori' => PlanKategori::Hosting, 'slug' => 'hosting-hosting-1-gb', 'nama' => 'Hosting 1 GB', 'harga' => 700000]);
+        $node = Node::create(['nama' => 'sanke', 'jenis' => 'directadmin', 'agent_url' => 'https://da.test:2222', 'da_user' => 'admin', 'token' => str_repeat('k', 64)]);
+        $s = Service::create(['user_id' => User::factory()->create()->id, 'plan_id' => $plan->id, 'label' => 'x', 'status' => ServiceStatus::Aktif, 'harga' => 1, 'node_id' => $node->id, 'detail' => ['da_user' => 'contoh']]);
+        $admin = User::factory()->create(['is_admin' => true]);
+
+        $this->actingAs($admin)->put(route('admin.layanan.update', $s), ['status' => 'ditangguhkan'])->assertRedirect();
+        Queue::assertPushed(PodAction::class, fn ($j) => $j->aksi === 'stop');
+        $this->actingAs($admin)->put(route('admin.layanan.update', $s), ['status' => 'aktif'])->assertRedirect();
+        Queue::assertPushed(PodAction::class, fn ($j) => $j->aksi === 'start');
+        $this->actingAs($admin)->put(route('admin.layanan.update', $s), ['status' => 'aktif'])->assertRedirect();
+        Queue::assertPushed(PodAction::class, 2); // tanpa perubahan status = tanpa aksi
     }
 
     public function test_customers_cannot_see_others_or_admin_pages(): void

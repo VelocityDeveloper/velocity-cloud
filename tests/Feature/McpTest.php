@@ -114,4 +114,51 @@ class McpTest extends TestCase
         VelocityCloud::tool(Tools\MetrikHalamanTool::class, ['path' => '/app/n8n/', 'hari' => 7])->assertOk()->assertSee('"tampilan":3');
         VelocityCloud::tool(Tools\MetrikHalamanTool::class, ['path' => 'http://evil'])->assertHasErrors();
     }
+
+    public function test_tool_mcp_baru_arahan_target_promo_atribusi_dan_tiket(): void
+    {
+        config(['cloud.gsc.kredensial' => '/tidak/ada.json']);
+        $admin = User::factory()->create(['is_admin' => true]);
+        $pelanggan = User::factory()->create(['is_admin' => false, 'analitik_vid' => 'vidpelanggan1']);
+        \Illuminate\Support\Facades\DB::table('analitik_hits')->insert([
+            'waktu' => now()->subHour()->toDateTimeString(), 'jenis' => 'pv', 'vid' => 'vidpelanggan1', 'sid' => 'sesi00001',
+            'pid' => 'pid00001', 'path' => '/token-ai/', 'sumber' => 'google', 'medium' => 'organic', 'negara' => 'ID', 'internal' => false,
+        ]);
+
+        // Simpan arahan pemilik & target dari dashboard, lalu pastikan terbaca di mulai-siklus
+        $this->actingAs($admin)->post(route('admin.agen.arahan'), ['teks' => 'Fokus perbaiki CTA /token-ai/'])->assertRedirect();
+        $this->actingAs($admin)->put(route('admin.agen.target'), [
+            'mingguan' => ['sesi_asli' => 20, 'klik_pesan' => 8, 'klik_daftar' => 4, 'order_lunas' => 3],
+            'bulanan' => ['sesi_asli' => 80, 'klik_pesan' => 30, 'klik_daftar' => 15, 'order_lunas' => 10, 'omzet_lunas' => 3000000],
+        ])->assertRedirect();
+
+        VelocityCloud::tool(Tools\MulaiSiklus::class)->assertOk()
+            ->assertSee('Fokus perbaiki CTA /token-ai/')
+            ->assertSee('"sesi_asli"')
+            ->assertSee('"klik_daftar"');
+
+        // Atribusi pendaftar (tanpa email)
+        VelocityCloud::tool(Tools\AtribusiPendaftar::class, ['hari' => 30])->assertOk()
+            ->assertSee('google / organic')
+            ->assertDontSee($pelanggan->email);
+
+        // Tambah & ubah promo lewat MCP
+        VelocityCloud::tool(Tools\UbahPromo::class, [
+            'nama' => 'Bonus 10 Juta Token', 'bonus_token_juta' => 10, 'min_pembelian' => 50000,
+            'kategori' => ['ai', 'app'], 'alasan' => 'Dorong konversi awal',
+        ])->assertOk()->assertSee('Bonus 10 Juta Token');
+        VelocityCloud::tool(Tools\DaftarPromo::class)->assertOk()->assertSee('Bonus 10 Juta Token');
+
+        // Ringkasan tiket (tanpa PII)
+        $tiket = \App\Models\Tiket::create(['user_id' => $pelanggan->id, 'jenis' => 'support', 'status' => 'terbuka', 'judul' => 'Cara pakai API key']);
+        \App\Models\TiketPesan::create(['tiket_id' => $tiket->id, 'user_id' => $pelanggan->id, 'dari_admin' => false, 'isi' => 'Bagaimana setting base URL?']);
+        VelocityCloud::tool(Tools\RingkasanTiket::class)->assertOk()
+            ->assertSee('Cara pakai API key')
+            ->assertDontSee($pelanggan->email);
+
+        // Kontrol pelajaran dari dashboard admin
+        $p = \App\Models\AgenPelajaran::create(['judul' => 'Pola uji', 'isi' => 'Isi', 'bukti' => [], 'skor' => 1, 'status' => 'aktif']);
+        $this->actingAs($admin)->post(route('admin.agen.pelajaran.status', $p), ['status' => 'usang'])->assertRedirect();
+        $this->assertSame('usang', $p->fresh()->status);
+    }
 }

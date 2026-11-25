@@ -11,7 +11,7 @@ use Laravel\Mcp\Server\Tool;
 use Laravel\Mcp\Server\Tools\Annotations\IsReadOnly;
 
 #[IsReadOnly]
-#[Description('Analitik pengunjung situs velocitydeveloper.ai.id (tanpa trafik kantor): ringkasan vs periode lalu, sumber, halaman, landing, event klik Pesan/WA/Daftar, perangkat, negara. 10 baris teratas per tabel.')]
+#[Description('Analitik pengunjung situs velocitydatacenter.com (tanpa trafik kantor): ringkasan vs periode lalu, sumber, halaman, landing, event klik Pesan/WA/Daftar, perangkat, negara. 10 baris teratas per tabel.')]
 class LaporanAnalitik extends Tool
 {
     public function handle(Request $request): Response

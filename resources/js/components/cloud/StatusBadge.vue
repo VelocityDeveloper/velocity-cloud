@@ -14,9 +14,12 @@ const gaya = computed(() => {
         case 'belum_dibayar':
         case 'disiapkan':
         case 'terbuka':
+        case 'dibuat': // sesi VDC Pay
+        case 'menunggu':
             return 'bg-amber-100 text-amber-800';
         case 'gagal':
         case 'ditangguhkan':
+        case 'ditolak':
             return 'bg-red-100 text-red-700';
         default:
             return 'bg-slate-100 text-slate-600';

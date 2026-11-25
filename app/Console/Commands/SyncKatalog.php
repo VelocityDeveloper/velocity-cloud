@@ -22,31 +22,27 @@ class SyncKatalog extends Command
         $apps = json_decode(file_get_contents("$dir/apps.json"), true, flags: JSON_THROW_ON_ERROR);
 
         $baris = [];
-        foreach (['vps' => PlanKategori::Vps, 'managed' => PlanKategori::Managed] as $kunci => $kategori) {
-            foreach ($paket[$kunci] as $i => $p) {
+        foreach (['vps' => PlanKategori::Vps, 'managed' => PlanKategori::Managed, 'hosting' => PlanKategori::Hosting] as $kunci => $kategori) {
+            foreach ($paket[$kunci] ?? [] as $i => $p) { // hosting tanpa cpu/ram
                 $baris[] = [
                     'kategori' => $kategori, 'slug' => $kunci.'-'.Str::slug($p['nama']), 'nama' => $p['nama'], 'harga' => $p['harga'],
-                    'spek' => array_filter(['cpu' => $p['cpu'], 'ram' => $p['ram'], 'disk' => $p['disk'], 'bandwidth' => $p['bandwidth'] ?? null]),
+                    'spek' => array_filter(['cpu' => $p['cpu'] ?? null, 'ram' => $p['ram'] ?? null, 'disk' => $p['disk'], 'bandwidth' => $p['bandwidth'] ?? null]),
                     'fitur' => $p['fitur'], 'ringkas' => null, 'urutan' => $i,
                 ];
             }
         }
         $varianBaru = []; // slug varian tambahan: dibuat dengan stok 0 sampai kapasitas node dicek (#16)
         foreach ($apps as $i => $a) {
-            $spek = fn ($cpu, $ramMb) => [
-                'kategori_app' => $a['kategori'],
-                'cpu' => str_replace('.', ',', (string) $cpu).' vCPU',
-                'ram' => $ramMb >= 1024 ? str_replace('.', ',', (string) ($ramMb / 1024)).' GB' : $ramMb.' MB',
-            ];
+            $spek = fn ($cpu, $ramMb, $diskGb = null) => Plan::spekPod($a['kategori'], $cpu, $ramMb, $diskGb);
             $baris[] = [
                 'kategori' => PlanKategori::App, 'slug' => 'app-'.$a['slug'], 'nama' => $a['nama'], 'harga' => $a['harga'],
-                'spek' => isset($a['pod']) ? $spek($a['pod']['cpu'], $a['pod']['ram_mb']) : ['kategori_app' => $a['kategori']],
+                'spek' => isset($a['pod']) ? $spek($a['pod']['cpu'], $a['pod']['ram_mb'], $a['pod']['disk_gb'] ?? Plan::DISK_DEFAULT_GB) : ['kategori_app' => $a['kategori']],
                 'fitur' => $a['fitur'], 'ringkas' => $a['ringkas'], 'urutan' => $i,
             ];
             foreach ($a['varian'] ?? [] as $v) {
                 $baris[] = $varianBaru[] = [
                     'kategori' => PlanKategori::App, 'slug' => 'app-'.$a['slug'].'-'.Str::slug($v['nama']), 'nama' => $a['nama'].' '.$v['nama'],
-                    'harga' => $v['harga'], 'spek' => $spek($v['cpu'], $v['ram_mb']), 'fitur' => $a['fitur'], 'ringkas' => $a['ringkas'], 'urutan' => $i,
+                    'harga' => $v['harga'], 'spek' => $spek($v['cpu'], $v['ram_mb'], $v['disk_gb'] ?? Plan::DISK_DEFAULT_GB), 'fitur' => $a['fitur'], 'ringkas' => $a['ringkas'], 'urutan' => $i,
                 ];
             }
         }
@@ -63,7 +59,7 @@ class SyncKatalog extends Command
                 $plan->save();
             }
             // Paket yang hilang dari landing dinonaktifkan, bukan dihapus (layanan lama tetap merujuk).
-            Plan::whereIn('kategori', [PlanKategori::Vps, PlanKategori::Managed, PlanKategori::App])
+            Plan::whereIn('kategori', [PlanKategori::Vps, PlanKategori::Managed, PlanKategori::Hosting, PlanKategori::App])
                 ->whereNotIn('slug', array_column($baris, 'slug'))->update(['aktif' => false]);
 
             // Token AI tidak ada di landing: dibuat sekali dari config, sesudahnya diatur di Admin › Paket.
@@ -71,7 +67,7 @@ class SyncKatalog extends Command
                 Plan::firstOrCreate(['slug' => $p['slug']], [
                     'kategori' => PlanKategori::Ai, 'nama' => $p['nama'], 'harga' => $p['harga'], 'urutan' => $i,
                     'spek' => ['model' => $p['model'], 'satuan' => '1 juta token'],
-                    'fitur' => ['API kompatibel OpenAI', 'Saldo prabayar, tanpa masa berlaku', 'Input & output harga sama'],
+                    'fitur' => Plan::FITUR_AI,
                     'ringkas' => 'Token AI prabayar untuk model '.$p['nama'].' lewat API kompatibel OpenAI.',
                 ]);
             }

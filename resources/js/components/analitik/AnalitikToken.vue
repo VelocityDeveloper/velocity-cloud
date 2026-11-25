@@ -68,7 +68,9 @@ const ukuran = ref<'token' | 'request' | 'cache_hit'>('token');
 const namaUkuran = { token: 'Token', request: 'Request', cache_hit: 'Cache hit' };
 
 function ganti(e: Event) {
-    router.get(window.location.pathname, { periode: (e.target as HTMLSelectElement).value }, { preserveScroll: true, preserveState: true, replace: true });
+    // query lain (mis. ?tab=laporan di Admin › Paket) tetap dibawa
+    const q = { ...Object.fromEntries(new URLSearchParams(window.location.search)), periode: (e.target as HTMLSelectElement).value };
+    router.get(window.location.pathname, q, { preserveScroll: true, preserveState: true, replace: true });
 }
 </script>
 

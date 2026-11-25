@@ -41,8 +41,9 @@ class Tiket extends Model
             'status' => $this->status,
             'status_label' => self::STATUS[$this->status] ?? $this->status,
             'layanan' => $this->service?->label,
-            'pelanggan' => $this->user?->name,
-            'email' => $this->user?->email,
+            'pelanggan' => $this->user?->name ?? $this->nama_pengirim ?? $this->email_pengirim,
+            'email' => $this->user?->email ?? $this->email_pengirim,
+            'dari_email' => $this->email_pengirim !== null,
             'diperbarui' => $this->updated_at->toDateTimeString(),
         ];
     }

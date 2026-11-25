@@ -4,6 +4,8 @@ import { computed, ref } from 'vue';
 import KatalogController from '@/actions/App/Http/Controllers/KatalogController';
 import DataTable from '@/components/cloud/DataTable.vue';
 import PageHeader from '@/components/cloud/PageHeader.vue';
+import PromoBanner from '@/components/cloud/PromoBanner.vue';
+import type { PromoAktif } from '@/components/cloud/PromoBanner.vue';
 import InputError from '@/components/InputError.vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -19,9 +21,11 @@ const props = defineProps<{
     beli_maks_juta: number;
     endpoint_ai: string;
     pilihan_os: Record<string, string> | null;
+    promo: PromoAktif[];
     varian: (Paket & { nama_varian: string })[];
 }>();
 const ai = props.paket.kategori === 'ai';
+const hosting = props.paket.kategori === 'hosting'; // tagihan tahunan
 
 // Token AI: pilihan cepat + jumlah bebas, ringkasan pesanan ikut berubah.
 const pilihanJuta = [5, 10, 50, 100].filter((n) => n <= props.beli_maks_juta);
@@ -30,8 +34,10 @@ const jumlah = computed(() => Number(juta.value) || 0);
 const jumlahSah = computed(
     () => Number.isInteger(jumlah.value) && jumlah.value >= 1 && jumlah.value <= props.beli_maks_juta,
 );
-const total = computed(() => (props.paket.harga ?? 0) * jumlah.value);
+const hargaBeli = computed(() => props.paket.harga_promo ?? props.paket.harga ?? 0); // promo token AI bila berlaku
+const total = computed(() => hargaBeli.value * jumlah.value);
 const angka = (n: number) => n.toLocaleString('id-ID');
+const tglWaktu = (v: string) => new Intl.DateTimeFormat('id-ID', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(v));
 
 defineOptions({
     layout: {
@@ -42,12 +48,20 @@ defineOptions({
     },
 });
 
-const spek = Object.entries(props.paket.spek ?? {}).filter(
-    ([k]) => k !== 'kategori_app' && !(ai && k === 'satuan'),
-);
+// Token AI: harga paket = output; input & cache ditampilkan dalam rupiah.
+const spek = Object.entries(props.paket.spek ?? {})
+    .filter(([k]) => k !== 'kategori_app' && !(ai && k === 'satuan'))
+    .map(([k, v]): [string, unknown] => [
+        k,
+        k.startsWith('harga_') ? `${rupiah(Number(v))}/1 jt` : k === 'konteks' ? `${Number(v).toLocaleString('id-ID')} token` : v,
+    ]);
 const namaSpek: Record<string, string> = {
     model: 'Model',
     satuan: 'Satuan',
+    provider: 'Provider',
+    konteks: 'Konteks',
+    harga_input: 'Harga input',
+    harga_cache: 'Harga cache',
     cpu: 'CPU',
     ram: 'RAM',
     disk: 'Storage',
@@ -67,6 +81,7 @@ const namaSpek: Record<string, string> = {
                 :title="ai ? `Beli token ${paket.nama}` : `Pesan ${paket.nama}`"
                 :description="paket.ringkas ?? undefined"
             />
+            <PromoBanner :promo="promo" :kategori="paket.kategori" />
 
             <section v-if="varian.length > 1" aria-labelledby="judul-varian" class="grid gap-3">
                 <h2 id="judul-varian" class="text-sm font-medium text-ink">Pilih paket</h2>
@@ -120,7 +135,7 @@ const namaSpek: Record<string, string> = {
                     >
                         <input v-model.number="juta" type="radio" :value="n" class="sr-only" />
                         <span class="block font-semibold text-ink tabular-nums">{{ n }} juta</span>
-                        <span class="block text-xs text-muted-foreground tabular-nums">{{ rupiah((paket.harga ?? 0) * n) }}</span>
+                        <span class="block text-xs text-muted-foreground tabular-nums">{{ rupiah(hargaBeli * n) }}</span>
                     </label>
                 </div>
                 <div class="grid gap-2">
@@ -160,6 +175,24 @@ const namaSpek: Record<string, string> = {
                     VPS dibuat otomatis setelah lunas. Login root dan sandi tampil di halaman layanan.
                 </p>
                 <InputError :message="errors.os" />
+            </div>
+
+            <div v-if="hosting" class="grid gap-2">
+                <Label for="domain">Nama domain</Label>
+                <Input
+                    id="domain"
+                    name="domain"
+                    required
+                    placeholder="contoh.com"
+                    autocomplete="off"
+                    autocapitalize="none"
+                    spellcheck="false"
+                    class="max-w-80"
+                />
+                <p class="text-xs text-muted-foreground">
+                    Domain utama akun hosting. Akun DirectAdmin dibuat otomatis setelah lunas, info login tampil di halaman layanan.
+                </p>
+                <InputError :message="errors.domain" />
             </div>
 
             <section v-if="ai" class="space-y-3 rounded-lg border border-border p-5 text-sm">
@@ -219,10 +252,14 @@ const namaSpek: Record<string, string> = {
         <aside class="h-fit rounded-lg border border-border p-5 text-sm lg:sticky lg:top-6">
             <p class="font-semibold text-brand-700">{{ paket.nama }}</p>
             <p class="font-heading mt-1 text-2xl font-bold text-ink tabular-nums">
-                {{ rupiah(paket.harga)
+                <s v-if="paket.harga_promo != null" class="mr-1 text-base font-normal text-muted-foreground">{{ rupiah(paket.harga) }}</s
+                >{{ rupiah(paket.harga_promo ?? paket.harga)
                 }}<span class="text-sm font-normal text-muted-foreground">
-                    {{ ai ? '/1 juta token' : '/bulan' }}</span
+                    {{ ai ? '/1 juta token output' : hosting ? '/tahun' : '/bulan' }}</span
                 >
+            </p>
+            <p v-if="paket.harga_promo != null" class="mt-1 text-xs font-semibold text-brand-700">
+                Harga promo{{ paket.promo_selesai ? ` sampai ${tglWaktu(paket.promo_selesai)} WIB` : '' }}
             </p>
             <dl
                 v-if="spek.length"
@@ -276,7 +313,7 @@ const namaSpek: Record<string, string> = {
                     hangus. API key dan saldo aktif setelah tagihan lunas.
                 </template>
                 <template v-else>
-                    Tagihan pertama untuk 1 bulan terbit setelah pesanan dibuat.
+                    Tagihan pertama untuk 1 {{ hosting ? 'tahun' : 'bulan' }} terbit setelah pesanan dibuat.
                     Layanan disiapkan setelah lunas.
                 </template>
             </p>

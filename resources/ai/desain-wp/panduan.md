@@ -1,4 +1,4 @@
-# Panduan desain WordPress FSE (Chat AI Velocity Cloud)
+# Panduan desain WordPress FSE (Chat AI Velocity Data Center)
 
 Target: landing page modern, rapi di desktop & HP, dan **mudah diedit pelanggan** dari editor blok / Site Editor.
 Caranya: child theme blok dari Twenty Twenty-Five + isi halaman dari seksi blok core yang sudah teruji.

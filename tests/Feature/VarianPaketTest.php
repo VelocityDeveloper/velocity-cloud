@@ -54,7 +54,7 @@ class VarianPaketTest extends TestCase
         $this->assertSame(0, $plus->stok);
         $this->assertSame('WAHA Plus', $plus->nama);
         $this->assertSame(80000, $plus->harga);
-        $this->assertSame(['kategori_app' => 'WhatsApp', 'cpu' => '1 vCPU', 'ram' => '2 GB'], $plus->spek);
+        $this->assertSame(['kategori_app' => 'WhatsApp', 'cpu' => '1 vCPU', 'ram' => '2 GB', 'disk' => '5 GB'], $plus->spek);
         $this->assertSame('0,5 vCPU', $dasar->spek['cpu']);
         $this->assertFalse($plus->bisaDipesan());
 

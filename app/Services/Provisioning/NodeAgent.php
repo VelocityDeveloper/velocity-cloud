@@ -17,6 +17,7 @@ use Illuminate\Support\Facades\Http;
  *   GET    /pods/{name}/perangkat        daftar pairing OpenClaw   → { pending[], paired[] }
  *   POST   /pods/{name}/perangkat/{id}   setujui permintaan pairing
  *   POST   /pods/{name}/wp           WP-CLI di container web { args[] } → { ok, out, err }
+ *   PUT    /pods/{name}/domain      { domains[] } ganti custom domain pod
  *   POST   /pods/{name}/berkas       tulis berkas di wp-content { path, isi, tambah } → { path, ukuran }
  * Implementasi: /opt/velocity-pod-agent/agent.ts (PC lokal, Podman rootless user velocity-pod).
  */
@@ -45,6 +46,12 @@ class NodeAgent
     public function status(string $nama): array
     {
         return $this->http()->timeout(10)->get('/pods/'.rawurlencode($nama))->json();
+    }
+
+    /** Pemakaian mesin node: { waktu, inti, cpu_total, cpu_idle, ram, ram_total, disk, disk_total, load, uptime, rx, tx } */
+    public function host(): array
+    {
+        return $this->http()->timeout(10)->get('/host')->json();
     }
 
     /** { name, log: {container: teks} } */
@@ -80,6 +87,12 @@ class NodeAgent
     public function berkas(string $nama, string $path, string $isi, bool $tambah = false): array
     {
         return $this->http()->timeout(60)->post('/pods/'.rawurlencode($nama).'/berkas', compact('path', 'isi', 'tambah'))->json();
+    }
+
+    /** Ganti seluruh custom domain pod ini (kosong = lepas) → router nginx diperbarui agent. */
+    public function domain(string $nama, array $domains): void
+    {
+        $this->http()->put('/pods/'.rawurlencode($nama).'/domain', ['domains' => array_values($domains)])->throw();
     }
 
     public function hapus(string $nama): void

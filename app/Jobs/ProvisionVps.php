@@ -57,6 +57,7 @@ class ProvisionVps implements ShouldQueue
             $incus->aksi($nama, 'start');
         }
 
+        $host = $node->vps_host ?: $cfg['relay_host']; // node ber-IP publik: DNAT di node sendiri, bukan relay
         $ssh = $cfg['port_ssh'] + $n;
         $ekstra = $cfg['port_ekstra'] + $n * 10;
         $service->update([
@@ -64,13 +65,16 @@ class ProvisionVps implements ShouldQueue
             'pesan_gagal' => null,
             'detail' => [
                 ...$service->detail,
-                'host' => $cfg['relay_host'],
+                'host' => $host,
                 'host_port' => $ssh,
                 'ip' => $cfg['subnet'].'.'.$n,
                 'kredensial' => Crypt::encryptString(json_encode(['pengguna' => 'root', 'sandi' => $sandi])),
-                'akses' => "SSH: ssh root@{$cfg['relay_host']} -p {$ssh}\n"
-                    ."Port tambahan: {$cfg['relay_host']}:{$ekstra}-".($ekstra + 9)." (TCP/UDP) diteruskan ke port yang sama di VPS.\n"
-                    .'VPS siap dipakai ±1-3 menit setelah aktif (cloud-init memasang SSH).',
+                'akses' => "SSH: ssh root@{$host} -p {$ssh}\n"
+                    ."Port tambahan: {$host}:{$ekstra}-".($ekstra + 9)." (TCP/UDP) diteruskan ke port yang sama di VPS.\n"
+                    .'VPS siap dipakai ±1-3 menit setelah aktif (cloud-init memasang SSH).'
+                    .(($cfg['os'][$service->detail['os'] ?? '']['aapanel'] ?? false)
+                        ? "\naaPanel: https://{$host}:{$ekstra}/".self::jalurPanel($sandi)." (user velocity, sandi sama dengan root; siap ±5-10 menit setelah aktif, log /var/log/aapanel-install.log)."
+                        : ''),
             ],
         ]);
     }
@@ -97,19 +101,29 @@ class ProvisionVps implements ShouldQueue
                 'limits.memory' => $angka($spek['ram'] ?? null).'GiB',
                 'security.secureboot' => 'false',
                 'boot.autostart' => 'true',
-                'cloud-init.user-data' => self::cloudInit($nama, $sandi),
+                'cloud-init.user-data' => self::cloudInit($nama, $sandi, ($os['aapanel'] ?? false) ? $cfg['port_ekstra'] + $n * 10 : null),
                 'user.velocity.service' => (string) $service->id,
             ],
             'devices' => [
                 'root' => ['type' => 'disk', 'path' => '/', 'pool' => $cfg['pool'], 'size' => $angka($spek['disk'] ?? null).'GiB'],
                 'eth0' => ['type' => 'nic', 'name' => 'eth0', 'network' => $cfg['network'], 'ipv4.address' => $cfg['subnet'].'.'.$n],
+                'agent' => ['type' => 'disk', 'source' => 'agent:config'], // wajib untuk image CentOS/Rocky, aman untuk lainnya
             ],
         ];
     }
 
-    /** Login root + sandi lewat SSH (sandi hanya A-Z/a-z/0-9, aman di YAML). */
-    public static function cloudInit(string $nama, string $sandi): string
+    /** Jalur keamanan aaPanel: turunan sandi (rahasia), jadi tidak perlu disimpan terpisah. */
+    public static function jalurPanel(string $sandi): string
     {
+        return 'vc'.substr(hash('sha256', $sandi), 0, 10);
+    }
+
+    /** Login root + sandi lewat SSH (sandi hanya A-Z/a-z/0-9, aman di YAML & shell). $panel = port aaPanel (opsional). */
+    public static function cloudInit(string $nama, string $sandi, ?int $panel = null): string
+    {
+        $aapanel = $panel === null ? '' : "\n".'  - [sh, -c, "curl -fsSL https://www.aapanel.com/script/install_7.0_en.sh -o /root/install-aapanel.sh && bash /root/install-aapanel.sh aapanel -y -P '
+            .$panel.' -u velocity -p '.$sandi.' --safe-path '.self::jalurPanel($sandi).' > /var/log/aapanel-install.log 2>&1"]';
+
         return <<<YAML
         #cloud-config
         hostname: {$nama}
@@ -126,7 +140,9 @@ class ProvisionVps implements ShouldQueue
               PasswordAuthentication yes
         packages: [openssh-server]
         runcmd:
-          - [systemctl, restart, ssh]
+          # image RHEL (CentOS/Rocky) tanpa openssh: sshd_config dibuat cloud-init lebih dulu, bawaan RPM jadi .rpmnew tanpa Include
+          - [sh, -c, "grep -qi '^Include /etc/ssh/sshd_config.d' /etc/ssh/sshd_config || sed -i '1i Include /etc/ssh/sshd_config.d/*.conf' /etc/ssh/sshd_config"]
+          - [sh, -c, "systemctl restart ssh || systemctl restart sshd"]{$aapanel}
         YAML;
     }
 

@@ -3,12 +3,14 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\CheckoutKlien;
+use App\Models\CheckoutSesi;
 use App\Models\MetodeBayar;
 use App\Models\Pengaturan;
 use App\Services\Pembayaran\Midtrans;
-use Illuminate\Support\Facades\Crypt;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
@@ -28,6 +30,17 @@ class PembayaranController extends Controller
                 // hanya 4 karakter akhir yang dikirim ke browser
                 'kunci_akhir' => ($k = Midtrans::kunci()) === '' ? null : substr($k, -4),
                 'url_notifikasi' => rtrim(config('app.url'), '/').route('midtrans.notifikasi', absolute: false),
+            ],
+            'vdcpay' => [
+                'klien' => CheckoutKlien::orderBy('nama')->get()->map(fn (CheckoutKlien $k) => $k->only(
+                    'id', 'nama', 'kode', 'kunci_akhir', 'url_webhook', 'aktif') + ['host_kembali' => implode("\n", $k->host_kembali)]),
+                'sesi' => CheckoutSesi::with(['klien:id,kode', 'webhook'])->latest('id')->limit(20)->get()->map(fn (CheckoutSesi $s) => [
+                    'id' => $s->uuid, 'klien' => $s->klien->kode, 'ref' => $s->ref, 'jumlah' => $s->jumlah,
+                    'status' => $s->status->value, 'status_label' => $s->status->label(),
+                    'dibuat' => $s->created_at->toIso8601String(),
+                    'webhook' => $s->webhook->map->only('id', 'jenis', 'status', 'percobaan', 'kode_respons', 'galat')->values(),
+                ]),
+                'url_api' => rtrim(config('app.url'), '/').'/api/checkout/sessions',
             ],
         ]);
     }

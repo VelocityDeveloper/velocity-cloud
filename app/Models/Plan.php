@@ -79,6 +79,36 @@ class Plan extends Model
         return $pod && collect($pod['containers'])->every(fn ($c) => filled($c['image'])) ? $pod : null;
     }
 
+    /** Spek tampilan paket app dari limit pod (sama untuk katalog:sync & Admin › Paket). */
+    /** Disk app bila apps.json tidak menulis disk_gb (app baru). */
+    public const DISK_DEFAULT_GB = 5;
+
+    /** Fitur paket token AI (katalog:sync & Tambah paket AI). */
+    public const FITUR_AI = ['API kompatibel OpenAI', 'Saldo prabayar, tanpa masa berlaku', 'Harga input, cache & output terpisah'];
+
+    /** disk_gb hanya informasi (belum dibatasi per pod: XFS root noquota); null = kunci disk tidak ada. */
+    public static function spekPod(?string $kategoriApp, float|int $cpu, int $ramMb, ?int $diskGb = null): array
+    {
+        return array_filter([
+            'kategori_app' => $kategoriApp,
+            'cpu' => str_replace('.', ',', (string) $cpu).' vCPU',
+            'ram' => $ramMb >= 1024 ? str_replace('.', ',', (string) ($ramMb / 1024)).' GB' : $ramMb.' MB',
+            'disk' => $diskGb ? $diskGb.' GB' : null,
+        ], fn ($v) => $v !== null);
+    }
+
+    /** Limit pod mentah [cpu, ram_mb, disk_gb] untuk form Admin › Paket; null bila bukan app atau tanpa pod. */
+    public function limitPod(): ?array
+    {
+        $disk = isset($this->spek['disk']) ? (int) $this->spek['disk'] : null; // "10 GB" → 10
+        if ($v = $this->varian()) {
+            return ['cpu' => $v['cpu'], 'ram_mb' => $v['ram_mb'], 'disk_gb' => $disk];
+        }
+        $l = $this->kategori === PlanKategori::App ? config('cloud.pods.'.$this->appSlug().'.limit') : null;
+
+        return $l ? ['cpu' => $l['cpu'], 'ram_mb' => (int) $l['memori'], 'disk_gb' => $disk] : null;
+    }
+
     /** Batas RAM pod dalam MB (limit memori "1024m"), 0 bila bukan app. */
     public function ramPodMb(): int
     {
@@ -103,6 +133,24 @@ class Plan extends Model
     public function vpsOtomatis(): bool
     {
         return $this->kategori === PlanKategori::Vps && in_array($this->slug, config('cloud.vps.paket'), true);
+    }
+
+    /** Harga promo token AI (spek harga_promo, periode promo_mulai–promo_selesai WIB; kosong = tanpa batas) bila sedang berlaku. */
+    public function hargaPromo(): ?int
+    {
+        $s = $this->spek ?? [];
+        $promo = isset($s['harga_promo']) ? (int) $s['harga_promo'] : null;
+        $berlaku = $promo !== null && $this->harga !== null && $promo < $this->harga
+            && (empty($s['promo_mulai']) || now()->gte($s['promo_mulai']))
+            && (empty($s['promo_selesai']) || now()->lte(\Illuminate\Support\Carbon::parse($s['promo_selesai'])->endOfMinute())); // sampai 23:59 = sampai 23:59:59
+
+        return $berlaku ? $promo : null;
+    }
+
+    /** Harga beli per 1 jt token saat ini (promo bila berlaku). Potong saldo & biaya pemakaian tetap memakai harga normal. */
+    public function hargaBeli(): ?int
+    {
+        return $this->hargaPromo() ?? $this->harga;
     }
 
     public function bisaDipesan(): bool

@@ -5,6 +5,7 @@ namespace App\Services\Agen;
 use App\Services\Seo\SearchConsole;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Throwable;
 
 /**
@@ -13,7 +14,6 @@ use Throwable;
  */
 class MetrikHalaman
 {
-    private const LANDING = 'https://velocitydeveloper.ai.id'; // properti GSC sc-domain:velocitydeveloper.ai.id
 
     public function __construct(private SearchConsole $gsc) {}
 
@@ -42,7 +42,7 @@ class MetrikHalaman
             return null;
         }
         try {
-            $url = self::LANDING.$path;
+            $url = 'https://'.Str::after(config('cloud.gsc.situs'), 'sc-domain:').$path; // properti Domain GSC = host landing
             $baris = collect($this->gsc->kueri($dari->toDateString(), $sampai->toDateString(), ['page'], 1000))
                 ->first(fn ($r) => rtrim($r['keys'][0], '/') === rtrim($url, '/'));
 

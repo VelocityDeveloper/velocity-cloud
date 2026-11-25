@@ -8,7 +8,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 /**
- * Dipanggil server bot (bot.velocity.ai.id, mesin yang sama) saat masalah dibuka di grup dan saat ditandai fix.
+ * Dipanggil server bot (bot.velocity.ai.id, mesin yang sama) saat masalah atau review dibuka di grup dan saat ditandai fix.
  * Origin tunnel juga 127.0.0.1, jadi wajib token bersama (cloud.agen_diskusi_token).
  */
 class AgenDiskusiController extends Controller
@@ -30,16 +30,21 @@ class AgenDiskusiController extends Controller
         ]);
 
         if (! empty($d['id'])) {
-            $c = AgenCatatan::where('jenis', 'masalah')->findOrFail($d['id']);
+            $c = AgenCatatan::whereIn('jenis', ['masalah', 'review'])->findOrFail($d['id']);
             $c->update(array_filter(['status' => $d['status'], 'ringkasan' => $d['ringkasan'] ?? null, 'diskusi_url' => $d['url'] ?? null], fn ($v) => $v !== null));
 
             return response()->json(['id' => $c->id]);
         }
 
+        $jenis = preg_match('/^review\b/i', trim($d['judul'])) ? 'review' : 'masalah';
         $terkait = ! empty($d['terkait']) && AgenCatatan::whereKey($d['terkait'])->exists() ? "\n\nTerkait catatan #{$d['terkait']}." : '';
         $c = AgenCatatan::create([
-            'jenis' => 'masalah', 'status' => $d['status'], 'judul' => $d['judul'], 'isi' => $d['isi'].$terkait,
-            'agen' => $d['agen'] ?? 'Dudung', 'diskusi_url' => $d['url'] ?? null,
+            'jenis' => $jenis,
+            'status' => $d['status'],
+            'judul' => $d['judul'],
+            'isi' => $d['isi'].$terkait,
+            'agen' => $d['agen'] ?? 'Dudung',
+            'diskusi_url' => $d['url'] ?? null,
         ]);
 
         return response()->json(['id' => $c->id], 201);

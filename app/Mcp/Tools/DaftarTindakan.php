@@ -11,14 +11,14 @@ use Laravel\Mcp\Server\Tool;
 use Laravel\Mcp\Server\Tools\Annotations\IsReadOnly;
 
 #[IsReadOnly]
-#[Description('Daftar tindakan & laporan tercatat (terbaru dulu, maks 50). Pakai status "disetujui" untuk mengambil usulan yang sudah disetujui admin lalu terapkan, atau tanpa filter untuk mengevaluasi tindakan kemarin.')]
+#[Description('Daftar tindakan, laporan, review, atau masalah tercatat (terbaru dulu, maks 50). Pakai status "disetujui" untuk mengambil usulan yang sudah disetujui admin lalu terapkan, atau tanpa filter untuk mengevaluasi tindakan kemarin.')]
 class DaftarTindakan extends Tool
 {
     public function handle(Request $request): Response
     {
         $d = $request->validate([
-            'jenis' => ['nullable', 'in:laporan,tindakan'],
-            'status' => ['nullable', 'in:'.implode(',', AgenCatatan::STATUS)],
+            'jenis' => ['nullable', 'in:laporan,tindakan,masalah,review'],
+            'status' => ['nullable', 'in:'.implode(',', [...AgenCatatan::STATUS, 'terbuka', 'fix'])],
             'hari' => ['nullable', 'integer', 'min:1', 'max:90'],
         ]);
 
@@ -32,8 +32,8 @@ class DaftarTindakan extends Tool
     public function schema(JsonSchema $schema): array
     {
         return [
-            'jenis' => $schema->string()->enum(['laporan', 'tindakan'])->description('Bawaan tindakan.'),
-            'status' => $schema->string()->enum(AgenCatatan::STATUS),
+            'jenis' => $schema->string()->enum(['laporan', 'tindakan', 'masalah', 'review'])->description('Bawaan tindakan.'),
+            'status' => $schema->string()->enum([...AgenCatatan::STATUS, 'terbuka', 'fix']),
             'hari' => $schema->integer()->description('Rentang hari ke belakang, bawaan 14.'),
         ];
     }

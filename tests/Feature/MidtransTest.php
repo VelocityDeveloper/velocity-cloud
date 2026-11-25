@@ -123,14 +123,24 @@ class MidtransTest extends TestCase
         Queue::assertPushed(ProvisionPod::class, 1);
     }
 
-    public function test_tanda_tangan_palsu_ditolak_tanpa_memanggil_api(): void
+    public function test_tanda_tangan_tak_cocok_tetap_dicek_ke_api_tanpa_percaya_isi(): void
+    {
+        $order = $this->invoice->nomor.'-1';
+        Http::fake(['api.sandbox.midtrans.com/v2/*' => Http::response(['order_id' => $order, 'transaction_status' => 'pending', 'gross_amount' => '50000.00'])]);
+        $this->postJson('/midtrans/notifikasi', ['order_id' => $order, 'status_code' => '200', 'transaction_status' => 'settlement',
+            'gross_amount' => '50000.00', 'signature_key' => str_repeat('a', 128)])->assertOk();
+
+        Http::assertSent(fn (Request $r) => str_ends_with($r->url(), '/v2/'.$order.'/status'));
+        $this->assertSame(InvoiceStatus::BelumDibayar, $this->invoice->fresh()->status); // isi "settlement" palsu diabaikan
+    }
+
+    public function test_tanda_tangan_tak_cocok_untuk_order_asing_diabaikan_tanpa_memanggil_api(): void
     {
         Http::fake();
-        $this->postJson('/midtrans/notifikasi', ['order_id' => $this->invoice->nomor.'-1', 'status_code' => '200',
-            'gross_amount' => '50000.00', 'signature_key' => str_repeat('a', 128)])->assertForbidden();
+        $this->postJson('/midtrans/notifikasi', ['order_id' => 'payment_notif_test_X', 'status_code' => '200',
+            'gross_amount' => '50000.00', 'signature_key' => str_repeat('a', 128)])->assertOk();
 
         Http::assertNothingSent();
-        $this->assertSame(InvoiceStatus::BelumDibayar, $this->invoice->fresh()->status);
     }
 
     public function test_pending_nominal_beda_dan_fraud_tidak_melunasi(): void

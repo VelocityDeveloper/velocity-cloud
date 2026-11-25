@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Head, Link } from '@inertiajs/vue3';
-import { Activity, CalendarClock, Globe, Package, Plus, Tag, Wallet } from '@lucide/vue';
+import { Activity, CalendarClock, Globe, Package, Plus, Settings2, Tag, Wallet } from '@lucide/vue';
 import DataTable from '@/components/cloud/DataTable.vue';
 import PageHeader from '@/components/cloud/PageHeader.vue';
 import StatusBadge from '@/components/cloud/StatusBadge.vue';
@@ -58,9 +58,10 @@ defineProps<{ layanan: Layanan[] }>();
                     </th>
                     <th class="text-right">
                         <span class="inline-flex items-center gap-1.5"
-                            ><Wallet class="size-4 text-brand-700" aria-hidden="true" />Harga/bln</span
+                            ><Wallet class="size-4 text-brand-700" aria-hidden="true" />Harga</span
                         >
                     </th>
+                    <th class="text-right"><span class="sr-only">Aksi</span></th>
                 </tr>
             </thead>
             <tbody>
@@ -90,7 +91,12 @@ defineProps<{ layanan: Layanan[] }>();
                         />
                     </td>
                     <td>{{ tanggal(l.jatuh_tempo) }}</td>
-                    <td class="text-right">{{ rupiah(l.harga) }}</td>
+                    <td class="text-right">{{ rupiah(l.harga) }}<span class="text-muted-foreground">{{ l.kategori === 'ai' ? '/jt token' : l.kategori === 'hosting' ? '/thn' : l.kategori === 'domain' ? '' : '/bln' }}</span></td>
+                    <td class="text-right">
+                        <Button size="sm" variant="outline" as-child>
+                            <Link :href="layananRoute.show(l.id)"><Settings2 aria-hidden="true" />Kelola</Link>
+                        </Button>
+                    </td>
                 </tr>
             </tbody>
         </DataTable>

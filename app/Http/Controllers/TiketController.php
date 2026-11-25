@@ -7,7 +7,10 @@ use App\Models\TiketLampiran;
 use App\Models\TiketPesan;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use App\Notifications\TiketDibalas;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Notification;
+use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Storage;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 use Illuminate\Validation\Rule;
@@ -66,7 +69,7 @@ class TiketController extends Controller
                 'id' => $p->id,
                 'isi' => $p->isi,
                 'dari_admin' => $p->dari_admin,
-                'nama' => $p->dari_admin ? 'Tim Velocity' : $p->user->name,
+                'nama' => $p->dari_admin ? 'Tim Velocity' : ($p->user?->name ?? $tiket->nama_pengirim ?? $tiket->email_pengirim),
                 'waktu' => $p->created_at->toDateTimeString(),
                 'lampiran' => $p->lampiran->map(fn ($l) => [
                     'id' => $l->id,
@@ -90,10 +93,19 @@ class TiketController extends Controller
         // admin membalas tiket pelanggan lain = jawaban tim; selain itu = pesan pelanggan (membuka lagi tiket yang ditutup)
         $dariAdmin = $request->user()->is_admin && $tiket->user_id !== $request->user()->id;
 
-        DB::transaction(function () use ($request, $tiket, $data, $dariAdmin) {
-            $this->simpanLampiran($request, $tiket->pesan()->create(['user_id' => $request->user()->id, 'dari_admin' => $dariAdmin, 'isi' => $data['isi']]));
+        $pesan = DB::transaction(function () use ($request, $tiket, $data, $dariAdmin) {
+            $this->simpanLampiran($request, $pesan = $tiket->pesan()->create(['user_id' => $request->user()->id, 'dari_admin' => $dariAdmin, 'isi' => $data['isi']]));
             $tiket->update(['status' => $dariAdmin ? 'dijawab' : 'terbuka']);
+
+            return $pesan;
         });
+        // tiket dari email: pengirim mungkin tidak punya akun, jadi jawaban tim dikirim lewat email (berangkai ke email terakhirnya)
+        if ($dariAdmin && $tiket->email_pengirim) {
+            $id = '<tiket-'.$tiket->id.'-'.$pesan->id.'@'.Str::after((string) config('mail.from.address'), '@').'>';
+            $rujukan = $tiket->pesan()->where('dari_admin', false)->whereNotNull('email_id')->latest('id')->value('email_id');
+            Notification::route('mail', $tiket->email_pengirim)->notify(new TiketDibalas($pesan, $id, $rujukan));
+            $pesan->update(['email_id' => $id]);
+        }
 
         return back();
     }

@@ -3,7 +3,6 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Actions\Billing\TandaiLunas;
-use App\Enums\InvoiceStatus;
 use App\Http\Controllers\Controller;
 use App\Http\Presenters\Tampil;
 use App\Models\Invoice;
@@ -17,7 +16,7 @@ class TagihanController extends Controller
 {
     public function index(Request $request): Response
     {
-        $status = $request->query('status', InvoiceStatus::BelumDibayar->value);
+        $status = $request->query('status', 'semua');
 
         return Inertia::render('admin/Tagihan', [
             'status' => $status,

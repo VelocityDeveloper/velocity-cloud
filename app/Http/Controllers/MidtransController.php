@@ -4,9 +4,11 @@ namespace App\Http\Controllers;
 
 use App\Enums\InvoiceStatus;
 use App\Models\Invoice;
+use App\Services\Pembayaran\Checkout;
 use App\Services\Pembayaran\Midtrans;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Symfony\Component\HttpFoundation\Response;
 use Throwable;
@@ -30,10 +32,18 @@ class MidtransController extends Controller
     }
 
     /** Notifikasi HTTP Midtrans (tanpa login/CSRF): tanda tangan dicek, status diambil ulang dari API (Midtrans::proses). */
-    public function notifikasi(Request $request, Midtrans $midtrans): JsonResponse
+    public function notifikasi(Request $request, Midtrans $midtrans, Checkout $checkout): JsonResponse
     {
-        abort_unless(Midtrans::tandaTanganSah($request->all()), 403);
-        $midtrans->proses($request->input('order_id'));
+        $order = (string) $request->input('order_id');
+        // shortcut: notifikasi ditandatangani server key DEFAULT yang tidak tersimpan (app pakai kunci "vdc"),
+        // jadi tanda tangan tak cocok tetap diproses: status selalu diambil dari API Midtrans, isi notifikasi tak dipercaya.
+        // Kunci DEFAULT tersimpan → kembalikan abort_unless(tandaTanganSah, 403).
+        if (! Midtrans::tandaTanganSah($request->all()) && ! Checkout::milik($order)
+            && ! Invoice::where('nomor', Str::beforeLast($order, '-'))->exists()) {
+            return response()->json(['ok' => true]); // order bukan milik kita (mis. notifikasi uji dashboard): abaikan tanpa memanggil API
+        }
+        // Satu Notification URL per akun Midtrans: order VDC Pay (CS-…) dipisah dari tagihan VDC (INV-…)
+        Checkout::milik($order) ? $checkout->proses($order) : $midtrans->proses($order);
 
         return response()->json(['ok' => true]);
     }

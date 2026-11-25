@@ -24,6 +24,20 @@ class Pengaturan extends Model
         return $nilai === null ? $bawaan : json_decode($nilai, true);
     }
 
+    /** OS VPS yang dijual: config cloud.vps.os disaring pilihan admin (bawaan = yang sudah teruji boot). */
+    public static function osVps(): array
+    {
+        $aktif = static::ambil('vps.os_aktif', ['ubuntu-24.04', 'debian-12']);
+
+        return array_intersect_key(config('cloud.vps.os'), array_flip($aktif));
+    }
+
+    /** TLD yang dijual di Pesan Domain (diatur Admin › Paket › Domain). Bawaan kosong = belum ada yang dijual. */
+    public static function tldDomain(): array
+    {
+        return static::ambil('domain.tld_aktif', []);
+    }
+
     public static function simpan(string $kunci, mixed $nilai): void
     {
         static::updateOrCreate(['kunci' => $kunci], ['nilai' => json_encode($nilai)]);

@@ -88,9 +88,23 @@ class Incus
         $s = $this->state($nama);
         $mem = $s['memory'] ?? [];
         $gib = fn ($b) => round($b / 1073741824, 1).' GiB';
+        $mib = fn ($b) => $b >= 1073741824 ? $gib($b) : round($b / 1048576).' MiB';
+        $nic = collect($s['network'] ?? [])->except('lo')->pluck('counters');
+        $rx = (int) $nic->sum('bytes_received');
+        $tx = (int) $nic->sum('bytes_sent');
+        $net = ['bytes_received' => $rx, 'bytes_sent' => $tx];
 
         return [
             'status' => $s['status'] ?? '-', // Running | Stopped | ...
+            'metrik' => ($s['status'] ?? '') === 'Running' ? [
+                'waktu' => time(), 'cpu_ns' => (int) ($s['cpu']['usage'] ?? 0), 'ram' => (int) ($mem['usage'] ?? 0), 'ram_total' => (int) ($mem['total'] ?? 0),
+                'proses' => (int) ($s['processes'] ?? 0), 'rx' => $rx, 'tx' => $tx,
+            ] : null,
+            'info' => ($s['status'] ?? '') === 'Running' ? array_filter([
+                'Proses' => isset($s['processes']) && $s['processes'] > 0 ? (string) $s['processes'] : null,
+                'Trafik masuk' => isset($net['bytes_received']) ? $mib($net['bytes_received']) : null,
+                'Trafik keluar' => isset($net['bytes_sent']) ? $mib($net['bytes_sent']) : null,
+            ]) : [],
             'pemakaian' => ($s['status'] ?? '') === 'Running' && ($mem['usage'] ?? 0) > 0
                 ? [['container' => 'vps', 'cpu' => '-', 'memori' => $gib($mem['usage']).' / '.$gib($mem['total'] ?? 0)]]
                 : [],

@@ -2,10 +2,13 @@
 
 namespace App\Services\Chat;
 
+use App\Actions\Order\PesanDomain;
 use App\Enums\ServiceStatus;
 use App\Http\Presenters\Tampil;
 use App\Jobs\PodAction;
+use App\Models\Pengaturan;
 use App\Models\Service;
+use App\Services\Crm\DomainCrm;
 use App\Models\User;
 use App\Services\Provisioning\Incus;
 use App\Services\Provisioning\NodeAgent;
@@ -24,7 +27,7 @@ use Throwable;
  */
 class AlatLayanan
 {
-    public const KONFIRMASI = ['aksi_layanan', 'wp', 'perintah_vps', 'tulis_berkas'];
+    public const KONFIRMASI = ['aksi_layanan', 'wp', 'perintah_vps', 'tulis_berkas', 'pesan_domain', 'ubah_nameserver'];
 
     /** Seksi contoh landing page (resources/ai/desain-wp/seksi/<n>-<nama>.html, markup blok tervalidasi). */
     public const SEKSI = ['hero', 'angka', 'produk', 'keunggulan', 'cara-pesan', 'testimoni', 'faq', 'kontak'];
@@ -52,6 +55,14 @@ class AlatLayanan
                 ['kata' => ['type' => 'string', 'description' => 'Kata kunci bahasa Inggris, spesifik'], 'jumlah' => ['type' => 'integer', 'description' => '1-8, bawaan 4']], ['kata']),
             $f('tulis_berkas', 'Tulis berkas di wp-content App WordPress: tema (themes/<slug>/...), isi halaman (uploads/velocity-ai/<nama>.html). Berkas .html dicek validitas bloknya. Pelanggan harus menyetujui dulu.',
                 ['id' => $id, 'path' => ['type' => 'string', 'description' => 'Relatif ke wp-content, mis. themes/velocitycoco/theme.json'], 'isi' => ['type' => 'string'], 'tambah' => ['type' => 'boolean', 'description' => 'true = sambung ke akhir berkas']], ['id', 'path', 'isi']),
+            $f('cek_domain', 'Cek ketersediaan dan harga domain (daftar baru & transfer, total per periode tahun) sebelum dipesan.',
+                ['domain' => ['type' => 'string', 'description' => 'Nama domain lengkap, mis. tokoanda.com']], ['domain']),
+            $f('pesan_domain', 'Buat pesanan domain + tagihan (pelanggan membayar di halaman tagihan; setelah lunas domain didaftarkan otomatis). Kontak pemilik domain memakai data pesanan domain sebelumnya. Pelanggan harus menyetujui dulu.',
+                ['domain' => ['type' => 'string'], 'jenis' => ['type' => 'string', 'enum' => ['Register', 'Transfer']], 'periode' => ['type' => 'integer', 'description' => 'Tahun, 1-10, bawaan 1'],
+                    'epp' => ['type' => 'string', 'description' => 'Kode EPP, wajib untuk Transfer']], ['domain', 'jenis']),
+            $f('info_domain', 'Status, masa aktif, jatuh tempo perpanjangan, dan nameserver domain milik pelanggan.', ['id' => $id], ['id']),
+            $f('ubah_nameserver', 'Ganti nameserver domain milik pelanggan (2-4 nameserver). Pelanggan harus menyetujui dulu.',
+                ['id' => $id, 'nameserver' => ['type' => 'array', 'items' => ['type' => 'string'], 'description' => 'mis. ["ns1.contoh.com","ns2.contoh.com"]']], ['id', 'nameserver']),
             $f('perintah_vps', 'Jalankan perintah shell sebagai root di Cloud Server (VPS) pelanggan, batas 60 detik, tanpa input interaktif (pakai -y). Pelanggan harus menyetujui dulu.',
                 ['id' => $id, 'perintah' => ['type' => 'string', 'description' => 'Perintah sh, mis. "df -h && free -m"']], ['id', 'perintah']),
         ];
@@ -74,6 +85,10 @@ class AlatLayanan
             'panduan_desain_wp' => 'Baca panduan desain WordPress',
             'contoh_seksi_wp' => 'Ambil contoh seksi '.$teks('seksi'),
             'cari_foto' => 'Cari foto "'.$teks('kata').'"',
+            'cek_domain' => 'Cek domain '.$teks('domain'),
+            'pesan_domain' => ($teks('jenis') === 'Transfer' ? 'Pesan transfer domain ' : 'Pesan domain ').$teks('domain').' '.max(1, (int) ($a['periode'] ?? 1)).' tahun',
+            'info_domain' => "Lihat info domain$id",
+            'ubah_nameserver' => 'Ganti nameserver ke '.implode(', ', array_filter((array) ($a['nameserver'] ?? []), 'is_scalar'))." (domain$id)",
             default => $nama,
         }, 0, 300);
     }
@@ -93,6 +108,10 @@ class AlatLayanan
                 'panduan_desain_wp' => self::panduan(),
                 'contoh_seksi_wp' => self::seksi($arg),
                 'cari_foto' => self::cariFoto($arg),
+                'cek_domain' => self::cekDomain($arg),
+                'pesan_domain' => self::pesanDomain($user, $arg),
+                'info_domain' => self::infoDomain(self::domainMilik($user, $arg)),
+                'ubah_nameserver' => self::ubahNameserver(self::domainMilik($user, $arg), $arg),
                 default => throw new \InvalidArgumentException("Alat $nama tidak dikenal."),
             };
             if (in_array($nama, self::KONFIRMASI, true)) {
@@ -124,8 +143,110 @@ class AlatLayanan
                 'wp' => self::kontrol($s) && $s->plan->appSlug() === 'wordpress',
                 'tulis_berkas' => self::kontrol($s) && $s->plan->appSlug() === 'wordpress',
                 'perintah_vps' => self::kontrol($s) && $s->node->jenis === 'incus',
+                'info_domain' => self::domainBisaDikelola($s),
+                'ubah_nameserver' => self::domainBisaDikelola($s),
             ])),
         ])->all();
+    }
+
+    private static function domainBisaDikelola(Service $s): bool
+    {
+        return $s->isDomain() && $s->status === ServiceStatus::Aktif && ! empty($s->detail['crm']['customer_id']);
+    }
+
+    private static function domainMilik(User $user, array $arg): Service
+    {
+        $s = $user->services()->with('plan')->find($arg['id'] ?? 0);
+        if (! $s || ! $s->isDomain()) {
+            throw new \DomainException('Domain tidak ditemukan di akun ini. Panggil daftar_layanan untuk melihat ID domain.');
+        }
+        if (! self::domainBisaDikelola($s)) {
+            throw new \DomainException("Domain \"{$s->label}\" belum bisa dikelola dari chat (status: {$s->status->label()}). Arahkan ke menu Tiket.");
+        }
+
+        return $s;
+    }
+
+    /** [customer_id CRM, id domain CRM] */
+    private static function domainCrm(Service $s): array
+    {
+        $cid = (int) $s->detail['crm']['customer_id'];
+        $d = app(DomainCrm::class)->domainCustomer($cid, $s->detail['domain']);
+        if (! $d) {
+            throw new \DomainException("Domain {$s->detail['domain']} tidak ditemukan di sistem domain kami. Arahkan ke menu Tiket.");
+        }
+
+        return [$cid, (int) $d['id'], $d];
+    }
+
+    private static function cekDomain(array $arg): array
+    {
+        $domain = PesanDomain::normalisasi((string) ($arg['domain'] ?? ''));
+        if (! preg_match(PesanDomain::POLA, $domain)) {
+            throw new \InvalidArgumentException('Format domain tidak valid, contoh: tokoanda.com.');
+        }
+        $info = app(PesanDomain::class)->info($domain);
+        if (! $info) {
+            return ['domain' => $domain, 'dijual' => false, 'pesan' => 'Ekstensi ini belum kami jual. Yang dijual: '.implode(', ', Pengaturan::tldDomain())];
+        }
+
+        return [
+            'domain' => $domain,
+            'status' => $info['tercatat'] ? 'sudah tercatat sebagai layanan Velocity' : match ($info['tersedia']) {
+                true => 'tersedia, bisa didaftarkan (Register)',
+                false => 'sudah terdaftar, hanya bisa Transfer bila milik pelanggan',
+                default => 'ketersediaan tidak bisa dicek otomatis',
+            },
+            'harga_rupiah' => $info['harga'],
+        ];
+    }
+
+    private static function pesanDomain(User $user, array $arg): array
+    {
+        $kontak = PesanDomain::kontakTerakhir($user);
+        $kurang = array_filter(PesanDomain::KONTAK_WAJIB, fn ($k) => blank($kontak[$k] ?? null));
+        if ($kurang) {
+            throw new \DomainException('Data pemilik domain (alamat lengkap untuk WHOIS) belum ada. Minta pelanggan memesan lewat '.route('domain.index').' sekali; pesanan berikutnya bisa lewat chat.');
+        }
+        $domain = PesanDomain::normalisasi((string) ($arg['domain'] ?? ''));
+        if (! preg_match(PesanDomain::POLA, $domain)) {
+            throw new \InvalidArgumentException('Format domain tidak valid, contoh: tokoanda.com.');
+        }
+        $jenis = ($arg['jenis'] ?? '') === 'Transfer' ? 'Transfer' : 'Register';
+        $tagihan = app(PesanDomain::class)->handle($user, $domain, $jenis, min(max((int) ($arg['periode'] ?? 1), 1), 10), $arg['epp'] ?? null, $kontak);
+
+        return [
+            'tagihan' => $tagihan->nomor,
+            'jumlah_rupiah' => $tagihan->total(), // termasuk kode unik
+            'bayar_di' => route('tagihan.show', $tagihan),
+            'pemilik_domain' => $kontak['nama'].' <'.$kontak['email'].'>',
+            'catatan' => 'Domain didaftarkan otomatis setelah tagihan lunas.',
+        ];
+    }
+
+    private static function infoDomain(Service $s): array
+    {
+        [$cid, $id, $d] = self::domainCrm($s);
+
+        return [
+            'domain' => $s->detail['domain'],
+            'status' => $d['status'],
+            'aktif_sampai' => $d['expiry_date'] ?? null,
+            'jatuh_tempo_perpanjangan' => $d['next_due_date'] ?? null,
+            'nameserver' => app(DomainCrm::class)->nameserver($cid, $id),
+        ];
+    }
+
+    private static function ubahNameserver(Service $s, array $arg): string
+    {
+        $ns = array_values(array_unique(array_map(fn ($n) => strtolower(rtrim(trim((string) $n), '.')), array_filter((array) ($arg['nameserver'] ?? []), 'is_scalar'))));
+        if (count($ns) < 2 || count($ns) > 4) {
+            throw new \InvalidArgumentException('Isi 2 sampai 4 nameserver.');
+        }
+        [$cid, $id] = self::domainCrm($s);
+        $hasil = app(DomainCrm::class)->ubahNameserver($cid, $id, $ns);
+
+        return ($hasil['message'] ?? 'Nameserver diubah').'. Perubahan menyebar 1-24 jam.';
     }
 
     private static function kontrol(Service $s): bool

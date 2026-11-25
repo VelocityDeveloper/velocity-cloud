@@ -9,8 +9,14 @@ class Pengurai
 
     private const SOSIAL = ['facebook' => 'facebook', 'fb.' => 'facebook', 'instagram' => 'instagram', 't.co' => 'x', 'twitter' => 'x', 'x.com' => 'x', 'linkedin' => 'linkedin', 'lnkd.in' => 'linkedin', 'youtube' => 'youtube', 'tiktok' => 'tiktok', 'whatsapp' => 'whatsapp', 'wa.me' => 'whatsapp', 't.me' => 'telegram', 'telegram' => 'telegram', 'threads' => 'threads', 'pinterest' => 'pinterest'];
 
-    /** @param  list<string>  $ipInternal */
-    public function __construct(private array $ipInternal = []) {}
+    /**
+     * @param  list<string>  $ipInternal  IP persis atau CIDR IPv4 (mis. 36.65.0.0/16)
+     * @param  list<string>  $vidInternal  ID pengunjung uji/internal yang dikecualikan
+     */
+    public function __construct(
+        private array $ipInternal = [],
+        private array $vidInternal = [],
+    ) {}
 
     public function urai(string $baris): ?array
     {
@@ -47,7 +53,7 @@ class Pengurai
             'baru' => ($q['n'] ?? '') === '1',
             'awal_sesi' => ($q['s'] ?? '') === '1',
             'masuk' => ($q['m'] ?? '') === '1',
-            'internal' => in_array($log['ip'] ?? '', $this->ipInternal, true),
+            'internal' => $this->adalahInternal((string) ($log['ip'] ?? ''), (string) $id('vid')),
         ];
 
         if ($jenis === 'pv') {
@@ -126,5 +132,46 @@ class Pengurai
         };
 
         return compact('perangkat', 'browser', 'os');
+    }
+
+    private function adalahInternal(string $ip, string $vid): bool
+    {
+        if ($vid !== '' && in_array($vid, $this->vidInternal, true)) {
+            return true;
+        }
+        if ($ip === '') {
+            return false;
+        }
+        foreach ($this->ipInternal as $aturan) {
+            $aturan = trim($aturan);
+            if ($aturan === '') {
+                continue;
+            }
+            if ($aturan === $ip) {
+                return true;
+            }
+            if (str_contains($aturan, '/') && self::cocokCidr($ip, $aturan)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static function cocokCidr(string $ip, string $cidr): bool
+    {
+        [$subnet, $prefix] = explode('/', $cidr, 2);
+        $bits = (int) $prefix;
+        if ($bits < 0 || $bits > 32) {
+            return false;
+        }
+        $ipLong = ip2long($ip);
+        $subLong = ip2long($subnet);
+        if ($ipLong === false || $subLong === false) {
+            return false;
+        }
+        $mask = $bits === 0 ? 0 : (~0 << (32 - $bits));
+
+        return ($ipLong & $mask) === ($subLong & $mask);
     }
 }

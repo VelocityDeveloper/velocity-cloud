@@ -15,7 +15,7 @@ defineProps<Props>();
 <template>
     <img
         src="/favicon.png"
-        alt="Velocity Cloud"
+        alt="Velocity Data Center"
         width="32"
         height="32"
         class="object-contain"

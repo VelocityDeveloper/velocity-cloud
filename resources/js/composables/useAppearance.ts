@@ -10,7 +10,7 @@ export type UseAppearanceReturn = {
     updateAppearance: (value: Appearance) => void;
 };
 
-// Brand Velocity Cloud: mode terang saja (lihat /brand/ di landing).
+// Brand Velocity Data Center: mode terang saja (lihat /brand/ di landing).
 export function updateTheme(_value: Appearance): void {
     if (typeof window !== 'undefined') {
         document.documentElement.classList.remove('dark');

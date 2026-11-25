@@ -17,9 +17,9 @@ class BuatPesanan
 {
     /**
      * Pesanan baru = layanan "menunggu pembayaran" + tagihan pertama.
-     * Bulanan: tagihan 1 bulan. Token AI: tagihan $tokenJuta × harga per juta token, tanpa jatuh tempo layanan.
+     * Tagihan pertama 1 periode (bulanan; hosting 1 tahun). Token AI: tagihan $tokenJuta × harga per juta token, tanpa jatuh tempo layanan.
      */
-    public function handle(User $user, Plan $plan, string $label, ?int $tokenJuta = null, array $detail = []): Invoice
+    public function handle(User $user, Plan $plan, string $label, ?int $tokenJuta = null, array $detail = [], ?string $domain = null): Invoice
     {
         if (! $plan->bisaDipesan()) {
             throw new InvalidArgumentException('Paket ini belum bisa dipesan.');
@@ -29,7 +29,7 @@ class BuatPesanan
             throw new InvalidArgumentException('Jumlah token wajib diisi.');
         }
 
-        return DB::transaction(function () use ($user, $plan, $label, $ai, $tokenJuta, $detail) {
+        return DB::transaction(function () use ($user, $plan, $label, $ai, $tokenJuta, $detail, $domain) {
             if ($plan->fresh()->sisaStok() === 0) { // cek ulang di dalam transaksi
                 throw new InvalidArgumentException('Stok paket ini habis.');
             }
@@ -42,6 +42,7 @@ class BuatPesanan
                 'plan_id' => $plan->id,
                 'label' => $label,
                 'subdomain' => $plan->appSlug() ? Service::subdomainAcak() : null,
+                'custom_domain' => $domain, // hosting: domain akun DirectAdmin
                 'status' => ServiceStatus::MenungguPembayaran,
                 'harga' => $plan->harga,
                 'detail' => $detail ?: null,
@@ -54,20 +55,20 @@ class BuatPesanan
                 'jumlah' => $plan->harga,
                 'status' => InvoiceStatus::BelumDibayar,
                 'periode_mulai' => today(),
-                'periode_selesai' => today()->addMonthNoOverflow(),
+                'periode_selesai' => today()->addMonthsNoOverflow($plan->kategori->bulanSiklus()),
                 'jatuh_tempo' => today()->addDays(config('cloud.tagihan.jatuh_tempo_hari')),
             ]);
         });
     }
 
-    /** Tagihan beli/top-up token AI; harga per juta token mengikuti harga paket saat ini. */
+    /** Tagihan beli/top-up token AI; harga per juta token mengikuti harga beli paket saat ini (promo bila berlaku). */
     public function tagihanToken(Service $service, int $tokenJuta): Invoice
     {
         return Invoice::create([
             'user_id' => $service->user_id,
             'service_id' => $service->id,
             'nomor' => Invoice::nomorBaru(),
-            'jumlah' => $service->plan->harga * $tokenJuta,
+            'jumlah' => $service->plan->hargaBeli() * $tokenJuta,
             'token_juta' => $tokenJuta,
             'status' => InvoiceStatus::BelumDibayar,
             'periode_mulai' => today(),

@@ -18,7 +18,9 @@ class Tampil
             'kategori' => $p->kategori->value,
             'nama' => $p->nama,
             'harga' => $p->harga,
-            'spek' => $p->spek,
+            'harga_promo' => $promo = $p->hargaPromo(), // token AI: harga beli promo yang sedang berlaku
+            'promo_selesai' => $promo !== null ? ($p->spek['promo_selesai'] ?? null) : null,
+            'spek' => $p->spek ? array_diff_key($p->spek, array_flip(['harga_promo', 'promo_mulai', 'promo_selesai'])) : null, // promo tampil lewat harga_promo
             'fitur' => $p->fitur,
             'ringkas' => $p->ringkas,
             'bisa_dipesan' => $p->bisaDipesan(),
@@ -46,9 +48,16 @@ class Tampil
             $detail = $s->detail ?? [];
             $data += [
                 'subdomain' => $s->subdomain,
+                'custom_domain' => $s->custom_domain,
+                'custom_domain_aktif' => (bool) $s->custom_domain_aktif_at,
+                'domain_didukung' => ! $s->isAi() && ! $s->isDomain(),
+                'domain_relay' => $s->domainLewatRelay(),
+                'relay_ip' => $s->domainLewatRelay() ? config('cloud.relay_ip') : ($detail['host'] ?? null),
                 'spek' => $s->plan->spek,
                 'is_app' => $s->isApp(),
-                'otomatis' => $s->isApp() || $s->plan->vpsOtomatis(),
+                'otomatis' => $s->isApp() || $s->isHosting() || $s->isDomain() || $s->plan->vpsOtomatis(),
+                'is_hosting' => $s->isHosting(),
+                'is_domain' => $s->isDomain(),
                 'kontrol' => (bool) $s->bisaKontrol(),
                 'pairing' => (bool) ($s->plan->pod()['pairing'] ?? false),
                 'host' => $detail['host'] ?? null,
@@ -56,10 +65,33 @@ class Tampil
                 'akses' => $detail['akses'] ?? null, // diisi admin untuk VPS/managed
                 'kredensial' => isset($detail['kredensial']) ? json_decode(Crypt::decryptString($detail['kredensial']), true) : null,
                 'pesan_gagal' => $s->pesan_gagal,
+                'info' => self::info($s, $detail),
             ];
         }
 
         return $data;
+    }
+
+    /** Baris info tambahan di halaman layanan: [label, nilai, salin?]. */
+    private static function info(Service $s, array $detail): array
+    {
+        $baris = [['ID layanan', '#'.$s->id, false], ['Dibuat', $s->created_at->translatedFormat('j F Y, H:i'), false]];
+        if ($s->isAi()) {
+            return $baris;
+        }
+        if ($os = config('cloud.vps.os')[$detail['os'] ?? '']['nama'] ?? null) {
+            $baris[] = ['Sistem operasi', $os, false];
+        }
+        if (! $s->isApp() && ($detail['host'] ?? null) && ($detail['host_port'] ?? null)) {
+            $baris[] = ['Perintah SSH', "ssh root@{$detail['host']} -p {$detail['host_port']}", true];
+        }
+        if (isset($detail['vm'], $detail['ip'])) {
+            $ekstra = config('cloud.vps.port_ekstra') + $detail['vm'] * 10;
+            $baris[] = ['IP internal VM', $detail['ip'], false];
+            $baris[] = ['Port tambahan', ($detail['host'] ?? '').":{$ekstra}-".($ekstra + 9).' (TCP/UDP)', false];
+        }
+
+        return $baris;
     }
 
     public static function tagihan(Invoice $i): array

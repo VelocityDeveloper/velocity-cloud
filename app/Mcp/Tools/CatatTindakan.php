@@ -39,7 +39,7 @@ class CatatTindakan extends Tool
         return Response::text("Tindakan #{$c->id} tercatat ({$c->status})".($awal ? ", metrik awal {$awal['path']} disimpan; dievaluasi mulai ".now()->addDays(AgenCatatan::HARI_EVALUASI)->toDateString().'.' : '. Tanpa target path landing: tidak bisa dievaluasi otomatis.'));
     }
 
-    /** Path landing dari target (mis. "/app/n8n/" atau "https://velocitydeveloper.ai.id/app/n8n/"); null bila bukan halaman. */
+    /** Path landing dari target (mis. "/app/n8n/" atau "https://velocitydatacenter.com/app/n8n/"); null bila bukan halaman. */
     private static function halaman(?string $target): ?string
     {
         $path = $target ? (parse_url($target, PHP_URL_PATH) ?? '') : '';

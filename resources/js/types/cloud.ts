@@ -1,9 +1,11 @@
 export type Paket = {
     id: number;
     slug: string;
-    kategori: 'vps' | 'managed' | 'app' | 'ai';
+    kategori: 'vps' | 'managed' | 'app' | 'ai' | 'hosting' | 'domain';
     nama: string;
     harga: number | null;
+    harga_promo: number | null; // token AI: harga beli saat promo berlaku
+    promo_selesai: string | null; // "YYYY-MM-DDTHH:mm" WIB, null = tanpa batas
     spek: Record<string, string> | null;
     fitur: string[] | null;
     ringkas: string | null;
@@ -27,8 +29,15 @@ export type Layanan = {
 
 export type LayananLengkap = Layanan & {
     subdomain: string | null;
+    custom_domain: string | null;
+    custom_domain_aktif: boolean;
+    domain_didukung: boolean;
+    domain_relay: boolean; // custom domain disambung otomatis lewat relay (app & VPS di belakang relay)
+    relay_ip: string | null;
     spek: Record<string, string> | null;
     is_app: boolean;
+    is_hosting: boolean;
+    is_domain: boolean;
     otomatis: boolean;
     kontrol: boolean;
     pairing: boolean;
@@ -37,6 +46,7 @@ export type LayananLengkap = Layanan & {
     akses: string | null;
     kredensial: Record<string, string> | null;
     pesan_gagal: string | null;
+    info: [string, string, boolean][];
 };
 
 export type Tiket = {

@@ -27,6 +27,7 @@ type Baris = Layanan & {
     email: string;
     node: string | null;
     akses: string | null;
+    custom_domain: string | null;
     pesan_gagal: string | null;
 };
 defineOptions({
@@ -50,7 +51,7 @@ const dipilih = ref<Baris | null>(null);
     <div class="space-y-6 p-4 md:p-6">
         <PageHeader
             title="Layanan"
-            description="Cloud Server dan Managed Server disiapkan manual: isi info akses lalu ubah status ke Aktif."
+            description="Cloud Server dan Managed Server disiapkan manual: isi info akses lalu ubah status ke Aktif. Akun Shared Hosting dibuat otomatis; bila gagal, klik Ulangi."
         >
             <FilterStatus :nilai="status" :pilihan="daftar_status" />
         </PageHeader>
@@ -74,9 +75,9 @@ const dipilih = ref<Baris | null>(null);
                     <td class="font-semibold text-ink">
                         {{ l.label
                         }}<span
-                            v-if="l.url"
+                            v-if="l.url || l.custom_domain"
                             class="block text-xs font-normal text-muted-foreground"
-                            >{{ l.url }}</span
+                            >{{ l.url ?? l.custom_domain }}</span
                         >
                     </td>
                     <td>
@@ -101,7 +102,7 @@ const dipilih = ref<Baris | null>(null);
                     <td>{{ tanggal(l.jatuh_tempo) }}</td>
                     <td class="space-x-2 text-right">
                         <Form
-                            v-if="l.status === 'gagal' && l.kategori === 'app'"
+                            v-if="l.status === 'gagal' && (l.kategori === 'app' || l.kategori === 'hosting' || l.kategori === 'domain')"
                             v-bind="LayananController.ulangi.form(l.id)"
                             class="inline"
                             v-slot="{ processing }"

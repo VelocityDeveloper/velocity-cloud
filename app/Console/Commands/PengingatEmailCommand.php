@@ -28,14 +28,14 @@ class PengingatEmailCommand extends Command
 
         $hari = config('pengingat.email.hari');
         $kirim = 0;
-        Invoice::with(['service.plan', 'user'])->where('status', InvoiceStatus::BelumDibayar)
+        Invoice::with(['service.plan', 'user'])->where('status', InvoiceStatus::BelumDibayar)->whereNull('token_juta') // top-up token bukan perpanjangan
             ->whereHas('service', fn ($q) => $q->where('status', ServiceStatus::Aktif))
             ->whereDate('jatuh_tempo', '>=', today())
             ->whereDate('jatuh_tempo', '<=', today()->addDays(max($hari)))
             ->each(function (Invoice $inv) use ($hari, $uji, &$kirim) {
                 $sisa = DaftarPengingat::selisihHari($inv->jatuh_tempo);
                 // hanya tagihan perpanjangan (periode mulai = jatuh tempo layanan), bukan pesanan baru/top-up
-                if (! in_array($sisa, $hari, true) || ! $inv->periode_mulai?->isSameDay($inv->service->jatuh_tempo)) {
+                if (! in_array($sisa, $hari, true) || ! $inv->service->jatuh_tempo || ! $inv->periode_mulai?->isSameDay($inv->service->jatuh_tempo)) {
                     return;
                 }
                 if ($uji) {

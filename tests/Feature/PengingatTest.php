@@ -47,7 +47,8 @@ class PengingatTest extends TestCase
         $this->tagihan($batal, today()->subDays(9)->toDateString());
 
         $p = app(DaftarPengingat::class)->untuk($user);
-        $this->assertSame(['tertunda', 'tertunda', 'jatuh_tempo', 'token'], array_column($p, 'jenis')); // urut jatuh tempo, token terakhir
+        $this->assertSame(['tertunda', 'jatuh_tempo', 'token', 'tertunda'], array_column($p, 'jenis')); // perpanjangan dulu, lalu token, pesanan baru terakhir
+        $this->assertStringContainsString('mulai '.today()->subDays(2)->addDays(4)->translatedFormat('j M Y'), $p[0]['pesan']); // jatuh tempo + 3 hari tenggang + 1
         $this->assertStringContainsString('5 hari lagi', collect($p)->firstWhere('jenis', 'jatuh_tempo')['judul']);
         $this->assertStringContainsString('lewat jatuh tempo', collect($p)->firstWhere('tingkat', 'bahaya')['judul']);
 
@@ -84,5 +85,32 @@ class PengingatTest extends TestCase
         $this->artisan('pengingat:email')->assertSuccessful();
         $this->artisan('pengingat:email')->assertSuccessful(); // dijalankan ulang: tidak dobel
         Notification::assertSentToTimes($user, PengingatJatuhTempo::class, 3);
+    }
+
+    public function test_layanan_ditangguhkan_dan_pesanan_terbengkalai(): void
+    {
+        $user = User::factory()->create();
+        $tangguh = $this->layanan($user, today()->subDays(6)->toDateString(), ServiceStatus::Ditangguhkan);
+        $this->tagihan($tangguh, today()->subDays(6)->toDateString());
+        $lama = $this->layanan($user, null, ServiceStatus::MenungguPembayaran);
+        $this->tagihan($lama, today()->subDays(15)->toDateString(), today()->subDays(18)->toDateString());
+
+        $p = app(DaftarPengingat::class)->untuk($user);
+        $this->assertCount(1, $p); // pesanan lewat >14 hari tidak diingatkan lagi
+        $this->assertStringContainsString('ditangguhkan', $p[0]['judul']);
+    }
+
+    public function test_email_tidak_dikirim_untuk_topup_token(): void
+    {
+        Notification::fake();
+        config(['pengingat.email.aktif' => true]);
+        $user = User::factory()->create();
+        $ai = $this->layanan($user, null, ServiceStatus::Aktif, PlanKategori::Ai);
+        // top-up: periode mulai hari ini, batas bayar +3, layanan AI tanpa jatuh tempo
+        Invoice::create(['user_id' => $user->id, 'service_id' => $ai->id, 'nomor' => Invoice::nomorBaru(), 'jumlah' => 28500, 'token_juta' => 1,
+            'status' => InvoiceStatus::BelumDibayar, 'periode_mulai' => today(), 'periode_selesai' => today(), 'jatuh_tempo' => today()->addDays(3)]);
+
+        $this->artisan('pengingat:email')->assertSuccessful();
+        Notification::assertNothingSent();
     }
 }

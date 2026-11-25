@@ -12,8 +12,16 @@ const semua = computed(() => ((page.props.pengingat as Pengingat[] | undefined) 
 
 // ditutup hanya untuk sesi browser ini; muncul lagi di sesi berikutnya selama masalahnya belum selesai
 const SIMPAN = 'pengingat-ditutup';
-const kunci = (p: Pengingat) => `${p.url}|${p.judul}`;
-const tutup = ref<string[]>(JSON.parse((typeof sessionStorage !== 'undefined' && sessionStorage.getItem(SIMPAN)) || '[]'));
+const kunci = (p: Pengingat) => `${p.url}|${p.jenis}`; // judul berubah tiap hari ("5 hari lagi"), jadi tidak dipakai
+const bacaTutup = (): string[] => {
+    try {
+        const v = JSON.parse((typeof sessionStorage !== 'undefined' && sessionStorage.getItem(SIMPAN)) || '[]');
+        return Array.isArray(v) ? v : [];
+    } catch {
+        return [];
+    }
+};
+const tutup = ref<string[]>(bacaTutup());
 const sembunyikan = (p: Pengingat) => {
     tutup.value = [...tutup.value, kunci(p)];
     sessionStorage.setItem(SIMPAN, JSON.stringify(tutup.value));

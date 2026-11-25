@@ -19,7 +19,10 @@ class DaftarPengingat
     /** @return list<array{jenis: string, tingkat: string, judul: string, pesan: string, url: string}> */
     public function untuk(User $user): array
     {
-        return [...$this->tagihan($user), ...$this->token($user)];
+        [$perpanjangan, $pesanan] = $this->tagihan($user);
+
+        // perpanjangan didahulukan agar tidak tergeser pesanan lama yang terbengkalai (dashboard menampilkan 3 teratas)
+        return [...$perpanjangan, ...$this->token($user), ...$pesanan];
     }
 
     /** Hari dari hari ini ke tanggal (negatif = sudah lewat). */
@@ -28,16 +31,21 @@ class DaftarPengingat
         return (int) today()->diffInDays($tanggal, false);
     }
 
+    /** Pesanan/top-up yang lewat batas bayar lebih dari ini tidak diingatkan lagi (dianggap ditinggalkan). */
+    private const PESANAN_LEWAT_MAKS_HARI = 14;
+
+    /** @return array{0: list<array>, 1: list<array>} [perpanjangan, pesanan baru/top-up] */
     private function tagihan(User $user): array
     {
         $batasTangguh = (int) config('cloud.tagihan.tangguhkan_hari_sesudah');
         $hasil = [];
+        $pesanan = [];
 
         Invoice::with('service.plan')->where('user_id', $user->id)
             ->where('status', InvoiceStatus::BelumDibayar)
             ->whereHas('service', fn ($q) => $q->whereNotIn('status', [ServiceStatus::Dibatalkan, ServiceStatus::Gagal]))
             ->orderBy('jatuh_tempo')
-            ->each(function (Invoice $inv) use (&$hasil, $batasTangguh) {
+            ->each(function (Invoice $inv) use (&$hasil, &$pesanan, $batasTangguh) {
                 $s = $inv->service;
                 $nama = $s->label ?: $s->plan?->nama ?: 'Layanan';
                 $tgl = $inv->jatuh_tempo->translatedFormat('j M Y');
@@ -59,12 +67,15 @@ class DaftarPengingat
                     $kapan = $sisa === 0 ? 'hari ini' : "$sisa hari lagi ($tgl)";
                     $hasil[] = $this->item('jatuh_tempo', 'peringatan', "$nama jatuh tempo $kapan", "Bayar tagihan perpanjangan {$inv->nomor} ($rp) agar layanan tidak ditangguhkan.", $url);
                 } else {
+                    if ($sisa < -self::PESANAN_LEWAT_MAKS_HARI) {
+                        return;
+                    }
                     $batas = $sisa < 0 ? "batas bayar $tgl sudah lewat" : "batas bayar $tgl";
-                    $hasil[] = $this->item('tertunda', $sisa < 0 ? 'bahaya' : 'peringatan', "Tagihan $nama belum dibayar", "Tagihan {$inv->nomor} ($rp), $batas.", $url);
+                    $pesanan[] = $this->item('tertunda', $sisa < 0 ? 'bahaya' : 'peringatan', "Tagihan $nama belum dibayar", "Tagihan {$inv->nomor} ($rp), $batas.", $url);
                 }
             });
 
-        return $hasil;
+        return [$hasil, $pesanan];
     }
 
     private function token(User $user): array

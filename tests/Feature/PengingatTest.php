@@ -113,4 +113,19 @@ class PengingatTest extends TestCase
         $this->artisan('pengingat:email')->assertSuccessful();
         Notification::assertNothingSent();
     }
+
+    public function test_topup_terbengkalai_tidak_menyembunyikan_saldo_habis(): void
+    {
+        $user = User::factory()->create();
+        $ai = $this->layanan($user, null, ServiceStatus::Aktif, PlanKategori::Ai);
+        $ai->tokenAi()->create(['kunci_hash' => 'x', 'saldo' => 0]);
+        $this->tagihan($ai, today()->subDays(15)->toDateString(), today()->subDays(18)->toDateString());
+
+        $p = app(DaftarPengingat::class)->untuk($user);
+        $this->assertSame(['token'], array_column($p, 'jenis'));
+        $this->assertStringContainsString('habis', $p[0]['judul']);
+
+        $this->tagihan($ai, today()->addDays(2)->toDateString(), today()->toDateString()); // top-up baru masih ditagih
+        $this->assertSame(['tertunda'], array_column(app(DaftarPengingat::class)->untuk($user), 'jenis'));
+    }
 }

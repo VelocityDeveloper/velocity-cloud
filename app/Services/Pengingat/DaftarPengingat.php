@@ -85,7 +85,9 @@ class DaftarPengingat
         return Service::with(['tokenAi', 'plan'])->where('user_id', $user->id)
             ->where('status', ServiceStatus::Aktif)
             ->whereHas('tokenAi', fn ($q) => $q->where('saldo', '<', $ambang))
-            ->whereDoesntHave('invoices', fn ($q) => $q->where('status', InvoiceStatus::BelumDibayar)) // top-up sudah ditagih
+            // top-up yang masih ditagih sudah tampil sebagai pengingat tagihan; top-up terbengkalai (>PESANAN_LEWAT_MAKS_HARI) tidak menyembunyikan peringatan token
+            ->whereDoesntHave('invoices', fn ($q) => $q->where('status', InvoiceStatus::BelumDibayar)
+                ->whereDate('jatuh_tempo', '>=', today()->subDays(self::PESANAN_LEWAT_MAKS_HARI)))
             ->get()
             ->map(function (Service $s) {
                 $nama = $s->label ?: $s->plan?->nama ?: 'Token AI';

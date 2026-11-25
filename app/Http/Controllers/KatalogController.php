@@ -5,7 +5,9 @@ namespace App\Http\Controllers;
 use App\Actions\Order\BuatPesanan;
 use App\Enums\PlanKategori;
 use App\Http\Presenters\Tampil;
+use App\Models\Invoice;
 use App\Models\Plan;
+use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -61,6 +63,15 @@ class KatalogController extends Controller
     {
         abort_unless($plan->bisaDipesan(), 422, $plan->sisaStok() === 0 ? 'Stok paket ini habis.' : 'Paket ini belum bisa dipesan.');
 
+        $invoice = self::pesan($request, $plan, $buat, $request->user());
+        Inertia::flash('toast', ['type' => 'success', 'message' => 'Pesanan dibuat. Silakan selesaikan pembayaran.']);
+
+        return to_route('tagihan.show', $invoice);
+    }
+
+    /** Validasi isian pesan per jenis paket + buat pesanan; dipakai halaman Pesan dan API CRM (/api/crm/pesan). */
+    public static function pesan(Request $request, Plan $plan, BuatPesanan $buat, User $user): Invoice
+    {
         $hosting = $plan->kategori === PlanKategori::Hosting;
         $request->merge(['domain' => strtolower(trim((string) $request->input('domain')))]);
         $data = $request->validate([
@@ -70,9 +81,6 @@ class KatalogController extends Controller
             'os' => [Rule::requiredIf($plan->vpsOtomatis()), 'nullable', Rule::in(array_keys(\App\Models\Pengaturan::osVps()))],
         ], \App\Models\Service::PESAN_DOMAIN);
 
-        $invoice = $buat->handle($request->user(), $plan, $data['label'] ?? $plan->nama, $plan->kategori === PlanKategori::Ai ? (int) $data['token_juta'] : null, $plan->vpsOtomatis() ? ['os' => $data['os']] : [], $hosting ? $data['domain'] : null);
-        Inertia::flash('toast', ['type' => 'success', 'message' => 'Pesanan dibuat. Silakan selesaikan pembayaran.']);
-
-        return to_route('tagihan.show', $invoice);
+        return $buat->handle($user, $plan, $data['label'] ?? $plan->nama, $plan->kategori === PlanKategori::Ai ? (int) $data['token_juta'] : null, $plan->vpsOtomatis() ? ['os' => $data['os']] : [], $hosting ? $data['domain'] : null);
     }
 }

@@ -2,8 +2,10 @@
 
 use App\Http\Controllers\Api\CheckoutSesiController;
 use App\Http\Controllers\Api\CrmLayananController;
+use App\Http\Controllers\Api\CrmPesanController;
 use App\Http\Controllers\Api\StatusKatalogController;
 use App\Http\Middleware\KlienCheckout;
+use App\Http\Middleware\KunciCrm;
 use Illuminate\Support\Facades\Route;
 
 // Landing (velocitydatacenter.com) membaca status stok paket untuk tombol "Stok habis".
@@ -17,5 +19,9 @@ Route::middleware([KlienCheckout::class, 'throttle:checkout'])->prefix('checkout
     Route::get('{id}', [CheckoutSesiController::class, 'show'])->name('api.checkout.show');
 });
 
-// CRM new-vdnet: layanan Velocity Cloud milik customer (per email). Kunci CRM_MASUK_KEY, hanya jalur lokal.
-Route::get('crm/layanan', CrmLayananController::class)->middleware('throttle:120,1')->name('api.crm.layanan');
+// CRM new-vdnet: layanan Velocity Cloud milik customer (per email) + buat layanan lunas dari CRM. Kunci CRM_MASUK_KEY, hanya jalur lokal.
+Route::middleware([KunciCrm::class, 'throttle:120,1'])->prefix('crm')->name('api.crm.')->group(function () {
+    Route::get('layanan', CrmLayananController::class)->name('layanan');
+    Route::get('katalog', [CrmPesanController::class, 'katalog'])->name('katalog');
+    Route::post('pesan', [CrmPesanController::class, 'store'])->name('pesan');
+});

@@ -13,14 +13,12 @@ use Illuminate\Support\Facades\DB;
 
 /**
  * CRM new-vdnet (kotak "Layanan Velocity Cloud" di detail customer): pengguna + layanan per email, hanya baca.
- * Hanya jalur lokal (CRM di PC yang sama → 127.0.0.1:8187); permintaan lewat Cloudflare ditolak walau kuncinya benar.
+ * Kunci & jalur lokal dicek middleware KunciCrm.
  */
 class CrmLayananController extends Controller
 {
     public function __invoke(Request $request): JsonResponse
     {
-        $kunci = (string) config('cloud.crm.masuk_key');
-        abort_if($request->hasHeader('CF-Connecting-IP') || $kunci === '' || ! hash_equals($kunci, (string) $request->bearerToken()), 404);
         $v = $request->validate(['email' => ['required', 'array', 'max:5'], 'email.*' => ['email', 'max:255']]);
         $email = array_values(array_unique(array_map('mb_strtolower', $v['email'])));
 

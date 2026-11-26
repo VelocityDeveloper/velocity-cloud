@@ -1,17 +1,17 @@
 <script setup lang="ts">
 import { Head, router } from '@inertiajs/vue3';
 import { usePoll } from '@inertiajs/vue3';
-import { computed } from 'vue';
+import { computed, onMounted, onUnmounted, ref } from 'vue';
 import GrafikTrenGabung from '@/components/analitik/GrafikTrenGabung.vue';
 import PetaJam from '@/components/analitik/PetaJam.vue';
 import TabelBatang from '@/components/analitik/TabelBatang.vue';
 import PageHeader from '@/components/cloud/PageHeader.vue';
 import { angka, durasi, persen, selisih } from '@/lib/analitik';
-import { tanggal } from '@/lib/format';
+import { rupiah, tanggal } from '@/lib/format';
 import admin from '@/routes/admin';
 
 type Baris = Record<string, any>;
-type Ringkasan = Record<'pengguna' | 'pengguna_baru' | 'sesi' | 'tampilan' | 'tampilan_per_sesi' | 'durasi_per_sesi' | 'engaged_rate' | 'bounce_rate' | 'konversi', number>;
+type Ringkasan = Record<'pengguna' | 'pengguna_baru' | 'sesi' | 'tampilan' | 'tampilan_per_sesi' | 'durasi_per_sesi' | 'engaged_rate' | 'bounce_rate' | 'konversi' | 'akun_baru' | 'pembelian' | 'nilai_pembelian' | 'pembayaran' | 'nilai_pembayaran', number>;
 type Tren = { label: string; pengguna: number | null; sesi: number | null; tampilan: number | null; baru: number | null; konversi: number | null };
 const props = defineProps<{
     filter: { periode: string; internal: boolean };
@@ -19,6 +19,7 @@ const props = defineProps<{
     laporan: {
         ringkasan: Ringkasan;
         ringkasan_lalu: Ringkasan;
+        harian: { hari_ini: Ringkasan; kemarin: Ringkasan };
         tren: Tren[];
         tren_lalu: Tren[];
         realtime: { aktif_30: number; aktif_5: number; per_menit: { label: string; n: number }[]; halaman: Baris[] };
@@ -32,8 +33,39 @@ defineOptions({
     layout: { breadcrumbs: [{ title: 'Admin · Analitik', href: admin.analitik.index() }] },
 });
 
-// data diimpor dari log tiap menit; muat ulang laporan tiap 60 dtk agar realtime ikut segar
+// cadangan bila SSE terputus/slot penuh; juga menggeser jendela realtime 30 menit
 usePoll(60_000, { only: ['laporan'] });
+
+// SSE: server mengirim `berubah` saat ada hit/tagihan/user baru (log diimpor tiap 10 dtk)
+const live = ref(false);
+let sse: EventSource | null = null;
+let sibuk = false;
+let tertunda = false;
+function muatUlang() {
+    if (sibuk) {
+        tertunda = true;
+
+        return;
+    }
+    sibuk = true;
+    router.reload({
+        only: ['laporan'],
+        onFinish: () => setTimeout(() => {
+            sibuk = false;
+            if (tertunda) {
+                tertunda = false;
+                muatUlang();
+            }
+        }, 3000),
+    });
+}
+onMounted(() => {
+    sse = new EventSource(admin.analitik.stream().url);
+    sse.addEventListener('berubah', muatUlang);
+    sse.onopen = () => (live.value = true);
+    sse.onerror = () => (live.value = false);
+});
+onUnmounted(() => sse?.close());
 
 function saring(ubah: Partial<typeof props.filter>) {
     const f = { ...props.filter, ...ubah };
@@ -52,7 +84,21 @@ const kpi = computed(() => [
     { label: 'Engagement rate', kunci: 'engaged_rate', f: persen },
     { label: 'Bounce rate', kunci: 'bounce_rate', f: persen, turunBagus: true },
     { label: 'Konversi (klik Pesan, WA, Daftar)', kunci: 'konversi', f: angka },
+    { label: 'User baru (daftar akun)', kunci: 'akun_baru', f: angka },
+    { label: 'Pembelian (tagihan dibuat)', kunci: 'pembelian', f: angka },
+    { label: 'Nilai pembelian', kunci: 'nilai_pembelian', f: rupiah },
+    { label: 'Pembayaran (lunas)', kunci: 'pembayaran', f: angka },
+    { label: 'Nilai pembayaran', kunci: 'nilai_pembayaran', f: rupiah },
 ] as { label: string; kunci: keyof Ringkasan; f: (n: number) => string; turunBagus?: boolean }[]);
+
+const kartuHarian = computed(() => [
+    { judul: 'Hari ini', d: props.laporan.harian.hari_ini },
+    { judul: 'Kemarin', d: props.laporan.harian.kemarin },
+]);
+const metrikHarian: [keyof Ringkasan, string, (n: number) => string][] = [
+    ['pengguna', 'Visitor', angka], ['pengguna_baru', 'Visitor baru', angka], ['sesi', 'Sesi', angka], ['tampilan', 'Tampilan', angka], ['konversi', 'Konversi', angka], ['akun_baru', 'User baru', angka],
+    ['pembelian', 'Pembelian', angka], ['nilai_pembelian', 'Nilai beli', rupiah], ['pembayaran', 'Pembayaran', angka], ['nilai_pembayaran', 'Nilai bayar', rupiah],
+];
 
 const maksMenit = computed(() => Math.max(1, ...props.laporan.realtime.per_menit.map((m) => m.n)));
 
@@ -88,6 +134,17 @@ const kolomPengguna = [
         </nav>
 
         <section id="ringkasan" class="scroll-mt-16 space-y-4">
+            <div class="grid gap-3 md:grid-cols-2">
+                <div v-for="k in kartuHarian" :key="k.judul" class="rounded-lg border border-border bg-white p-4">
+                    <h2 class="font-semibold text-ink">{{ k.judul }}</h2>
+                    <dl class="mt-3 grid grid-cols-2 gap-x-3 gap-y-3 sm:grid-cols-3 2xl:grid-cols-5">
+                        <div v-for="[kunci, nama, f] in metrikHarian" :key="kunci" class="min-w-0">
+                            <dt class="text-xs text-muted-foreground">{{ nama }}</dt>
+                            <dd class="truncate font-heading text-xl font-bold text-ink tabular-nums">{{ f(k.d[kunci]) }}</dd>
+                        </div>
+                    </dl>
+                </div>
+            </div>
             <div class="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
                 <div v-for="k in kpi" :key="k.kunci" class="rounded-lg border border-border bg-white p-4">
                     <p class="text-xs text-muted-foreground">{{ k.label }}</p>
@@ -106,7 +163,10 @@ const kolomPengguna = [
 
         <section id="realtime" class="scroll-mt-16 grid gap-4 lg:grid-cols-[1fr_2fr]">
             <div class="rounded-lg border border-border bg-white p-4">
-                <h2 class="font-semibold text-ink">Realtime</h2>
+                <h2 class="flex items-center gap-2 font-semibold text-ink">
+                    Realtime
+                    <span v-if="live" class="inline-flex items-center gap-1 text-xs font-normal text-volt-700"><span class="size-2 rounded-full bg-volt-700" aria-hidden="true" />Live</span>
+                </h2>
                 <p class="mt-3 text-xs text-muted-foreground">Visitor aktif 30 menit terakhir</p>
                 <p class="font-heading text-4xl font-bold text-ink tabular-nums">{{ angka(laporan.realtime.aktif_30) }}</p>
                 <p class="mt-1 text-sm text-muted-foreground">{{ angka(laporan.realtime.aktif_5) }} dalam 5 menit terakhir</p>
@@ -114,7 +174,7 @@ const kolomPengguna = [
                     <span v-for="m in laporan.realtime.per_menit" :key="m.label" class="flex-1 rounded-t-sm bg-brand-700" :style="{ height: m.n ? `${(m.n / maksMenit) * 100}%` : '2px', opacity: m.n ? 1 : 0.15 }" :title="`${m.label} · ${m.n} visitor`" />
                 </div>
                 <p class="mt-1 flex justify-between text-[10px] text-muted-foreground"><span>-30 mnt</span><span>sekarang</span></p>
-                <p class="mt-3 text-xs text-muted-foreground">Diperbarui tiap menit. Trafik kantor {{ filter.internal ? 'disertakan' : 'tidak dihitung' }}.</p>
+                <p class="mt-3 text-xs text-muted-foreground">{{ live ? 'Langsung diperbarui saat ada data baru.' : 'Diperbarui tiap menit.' }} Trafik kantor {{ filter.internal ? 'disertakan' : 'tidak dihitung' }}.</p>
             </div>
             <TabelBatang judul="Halaman dilihat, 30 menit terakhir" nama="Halaman" :baris="laporan.realtime.halaman" :kolom="[{ kunci: 'tampilan', label: 'Tampilan', format: angka }, { kunci: 'pengguna', label: 'Visitor', format: angka }]" kosong="Tidak ada pengunjung saat ini." />
         </section>

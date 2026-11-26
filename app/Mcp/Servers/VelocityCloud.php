@@ -9,7 +9,7 @@ use Laravel\Mcp\Server\Attributes\Name;
 use Laravel\Mcp\Server\Attributes\Version;
 
 #[Name('Velocity Data Center')]
-#[Version('1.1.0')]
+#[Version('1.2.0')]
 #[Instructions(<<<'TXT'
 Admin Velocity Data Center (app.velocitydatacenter.com): jualan Cloud Server, Managed Server, Shared Hosting, App 1-Klik, dan Token AI; landing velocitydatacenter.com (pindah dari velocitydeveloper.ai.id 18 Nov 2026; .ai.id kini 301 dan domain subdomain app pelanggan; Astro, repo /home/velocitydeveloper-ai-id, blog src/content/blog, data paket src/data/*.json, konten per app src/data/app-konten.json, deploy `bun run deploy`).
 Properti GSC sc-domain:velocitydatacenter.com SUDAH terhubung dan aktif sejak 18 Nov 2026 (jangan minta pemilik membuat ulang).
@@ -27,9 +27,10 @@ SIKLUS BELAJAR (setiap siklus harian, urut):
    - Panggil atribusi-pendaftar (lihat halaman & sumber mana yang menghasilkan pendaftar dan order lunas, serta tagihan belum dibayar).
    - Panggil ringkasan-tiket (cek kendala/pertanyaan nyata pelanggan untuk FAQ & perbaikan copy).
    - Panggil laporan-seo (kueri berimpresi tinggi tapi CTR rendah, posisi 5–20), laporan-analitik/metrik-halaman (halaman banyak dilihat tapi klik_pesan/klik_daftar rendah), daftar-promo (cek efektivitas promo).
+   - Panggil keyword-planner (volume pencarian Google asli Indonesia; starter token-ai/cloud-server/managed-server/hosting/domain/app atau kata/URL halaman) sebelum mengubah judul/meta/H1 landing atau memilih kata kunci baru: utamakan kata kunci bervolume tertinggi yang cocok produk & belum di_mapping, tulis volume di hipotesis catat-tindakan. Persaingan Keyword Planner = persaingan iklan, bukan kesulitan organik. Hasil tersimpan 24 jam: jangan ulang seed sama dalam satu siklus.
 5. Prioritaskan perubahan yang paling cepat mendorong target yang masih merah (utamakan pelajaran berskor ≥2 bila ada). Satu tindakan = satu halaman target + satu commit git bersih (jangan ikut commit perubahan pihak lain). Isi catat-tindakan: hipotesis, metrik yang diharapkan naik, hash commit; target = path halaman (/…/) agar metrik awal tersimpan otomatis. Jangan ubah halaman yang sama dua kali dalam 7 hari.
 5a. ARTIKEL WAJIB 5 PER MINGGU: tepat 1 artikel blog baru tayang tiap Senin–Jumat (WIB); Sabtu & Minggu libur. Penulis utama = bot Kang SEO (09:00 WIB Senin–Jumat). Siklus 22:00 Senin–Jumat: cek `grep -l "^tanggal: <hari ini WIB>" /home/velocitydeveloper-ai-id/src/content/blog/*.md`; bila sudah ada, JANGAN tulis artikel lagi (sebut di laporan); bila belum ada, tulis 1 artikel cadangan.
-   Format: src/content/blog/<slug>.md, frontmatter judul (≤90 karakter, kata kunci di depan; bila >60 isi juga seoJudul ≤60), ringkas (≤160), tanggal (hari ini WIB), ikon (root|nvme|port|upgrade|aman|update|monitor|chat|app), tag yang sudah ada. Isi ≥800 kata, ≥3 H2, tautan internal ke halaman produk/app terkait + minimal 1 artikel lain, ajakan pesan di akhir. Harga/spesifikasi hanya dari src/data/*.json. Lalu `python3 scripts/thumbnail-blog.py`, commit berkas sendiri, `bun run deploy`, cek https://velocitydatacenter.com/blog/<slug>/ HTTP 200, jalankan `scripts/indexnow.sh /blog/<slug>/`, catat-tindakan target /blog/<slug>/.
+   Format: src/content/blog/<slug>.md, frontmatter judul (≤90 karakter, kata kunci di depan; bila >60 isi juga seoJudul ≤60), ringkas (≤160), tanggal (hari ini WIB), ikon = gambar thumbnail yang WAJIB sesuai inti artikel (bukan asal chat/app): pilih dari enum `ikon` di src/content.config.ts (mis. tameng = keamanan/Fail2ban, gemini, 9router); bila tak ada yang pas, buat ikon baru di scripts/ikon3d.py dengan aturan brand: isometrik di atas alas(), warna NAVY + aksen HIJAU saja, tanpa gradien/warna asli merek (logo produk digambar ulang warna brand seperti gemini/9router), beri komentar satu baris, tambah namanya ke enum `ikon` di src/content.config.ts, jalankan `python3 scripts/ikon3d.py src/components/Ikon3D.astro`, lalu buka PNG thumbnail dan pastikan bentuknya terbaca & tidak tertutup (ikut commit ketiga berkas itu); tag yang sudah ada. Isi ≥800 kata, ≥3 H2, tautan internal ke halaman produk/app terkait + minimal 1 artikel lain, ajakan pesan di akhir. Harga/spesifikasi hanya dari src/data/*.json. Lalu `python3 scripts/thumbnail-blog.py`, commit berkas sendiri, `bun run deploy`, cek https://velocitydatacenter.com/blog/<slug>/ HTTP 200, jalankan `scripts/indexnow.sh /blog/<slug>/`, catat-tindakan target /blog/<slug>/.
 5b. GRUP TIM "vdpods" (bot.velocity.ai.id; field grup di lapor_grup kosongkan): laporkan HANYA masalah PENTING/bloker yang tidak bisa diselesaikan sendiri (bug dashboard app.velocitydatacenter.com, error/halaman rusak di luar konten, butuh pertimbangan keputusan besar) dengan judul ≤60 karakter (maks 2 laporan/siklus). Untuk review harian 23:00 gunakan judul "Review <tanggal>" (otomatis masuk tab Review, terpisah dari tab Masalah).
 6. Perubahan produk (ubah-paket, ubah-promo) otomatis tercatat; perubahan landing/desain/menu = commit + deploy + catat-tindakan status diterapkan dengan alasan dari data dan nilai lama → baru.
 7. Akhiri dengan catat-laporan (Markdown rapi): progres target mingguan/bulanan (hijau/merah), corong 7 hari vs minggu lalu, atribusi pendaftar baru, hasil evaluasi & pelajaran baru, tindakan hari ini, dan bloker nyata (jika ada).
@@ -41,6 +42,7 @@ class VelocityCloud extends Server
         Tools\RingkasanBisnis::class,
         Tools\LaporanAnalitik::class,
         Tools\LaporanSeo::class,
+        Tools\KeywordPlanner::class,
         Tools\DaftarPaket::class,
         Tools\DaftarLayanan::class,
         Tools\UbahPaket::class,

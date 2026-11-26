@@ -17,6 +17,7 @@ import {
     Users,
     Wallet,
     Gift,
+    Megaphone,
 } from '@lucide/vue';
 import { computed } from 'vue';
 import AppLogo from '@/components/AppLogo.vue';
@@ -78,6 +79,7 @@ const adminNavItems = computed<NavItem[]>(() => [
         ],
     },
     { title: 'Promo', href: admin.promo.index(), icon: Gift },
+    { title: 'Notifikasi', href: admin.notifikasi.index(), icon: Megaphone },
     {
         title: 'Support',
         href: admin.tiket.index(),
@@ -120,6 +122,7 @@ const adminNavItems = computed<NavItem[]>(() => [
         items: [
             { title: 'Ringkasan', href: admin.seo.index() },
             { title: 'Keyword Mapping', href: admin.seo.peta() },
+            { title: 'Keyword Planner', href: admin.seo.keyword() },
         ],
     },
     { title: 'Agent', href: admin.agen.index(), icon: Bot },

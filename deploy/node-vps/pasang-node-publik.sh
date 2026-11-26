@@ -98,6 +98,7 @@ incus config trust list --format csv | grep -qi "${FP:0:12}" || \
     type filter hook forward priority filter - 1; policy accept;
     ct state established,related accept
     iifname "vpsbr0" oifname "vpsbr0" ip daddr $EDGE ct status dnat accept comment "hairpin ke vc-edge"
+    iifname "vpsbr0" ip saddr $SUBNET.253 tcp dport 25 accept comment "vc-mail (pasang-mail.sh): satu-satunya jalur SMTP keluar"
     iifname "vpsbr0" tcp dport 25 reject with tcp reset comment "anti-spam: SMTP keluar diblok"
     iifname "vpsbr0" ip daddr { 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 100.64.0.0/10 } drop comment "VM tidak boleh ke jaringan privat"
     iifname "vpsbr0" oifname "$IFACE" accept

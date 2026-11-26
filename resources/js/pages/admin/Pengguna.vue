@@ -123,6 +123,7 @@ const jam = (w: string) => w.slice(0, 16);
         >
             <thead>
                 <tr>
+                    <th class="text-right">ID</th>
                     <th>Nama</th>
                     <th>Email</th>
                     <th>WhatsApp</th>
@@ -136,6 +137,7 @@ const jam = (w: string) => w.slice(0, 16);
             </thead>
             <tbody>
                 <tr v-for="u in pengguna" :key="u.id">
+                    <td class="text-right text-muted-foreground tabular-nums">{{ u.id }}</td>
                     <td class="font-semibold text-ink">
                         {{ u.name
                         }}<span

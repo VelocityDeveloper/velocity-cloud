@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Form, Head, Link, router } from '@inertiajs/vue3';
+import { Form, Head, Link, router } from "@inertiajs/vue3";
 import {
     Check,
     Eye,
@@ -11,26 +11,26 @@ import {
     Save,
     ScrollText,
     Search,
-} from '@lucide/vue';
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
-import LayananController from '@/actions/App/Http/Controllers/LayananController';
-import GrafikTren from '@/components/analitik/GrafikTren.vue';
-import AnalitikVps from '@/components/cloud/AnalitikVps.vue';
-import type { TitikMetrik } from '@/components/cloud/AnalitikVps.vue';
-import DataTable from '@/components/cloud/DataTable.vue';
-import PageHeader from '@/components/cloud/PageHeader.vue';
-import StatusBadge from '@/components/cloud/StatusBadge.vue';
-import TombolSalin from '@/components/cloud/TombolSalin.vue';
-import InputError from '@/components/InputError.vue';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { rupiah, tanggal } from '@/lib/format';
-import domainRoute from '@/routes/domain';
-import layananRoute from '@/routes/layanan';
-import tiketRoute from '@/routes/tiket';
-import tagihanRoute from '@/routes/tagihan';
-import type { LayananLengkap, Tagihan } from '@/types';
+} from "@lucide/vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
+import LayananController from "@/actions/App/Http/Controllers/LayananController";
+import GrafikTren from "@/components/analitik/GrafikTren.vue";
+import AnalitikVps from "@/components/cloud/AnalitikVps.vue";
+import type { TitikMetrik } from "@/components/cloud/AnalitikVps.vue";
+import DataTable from "@/components/cloud/DataTable.vue";
+import PageHeader from "@/components/cloud/PageHeader.vue";
+import StatusBadge from "@/components/cloud/StatusBadge.vue";
+import TombolSalin from "@/components/cloud/TombolSalin.vue";
+import InputError from "@/components/InputError.vue";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { rupiah, tanggal } from "@/lib/format";
+import domainRoute from "@/routes/domain";
+import layananRoute from "@/routes/layanan";
+import tiketRoute from "@/routes/tiket";
+import tagihanRoute from "@/routes/tagihan";
+import type { LayananLengkap, Tagihan } from "@/types";
 
 type Pod = {
     status?: string;
@@ -67,35 +67,63 @@ const props = defineProps<{
 const domainVdcAwal = props.domain_saya.find(
     (d) =>
         props.layanan.custom_domain === d ||
-        props.layanan.custom_domain?.endsWith('.' + d),
+        props.layanan.custom_domain?.endsWith("." + d),
 );
-const sumberDomain = ref<'vdc' | 'luar'>(
+const sumberDomain = ref<"vdc" | "luar">(
     domainVdcAwal || (!props.layanan.custom_domain && props.domain_saya.length)
-        ? 'vdc'
-        : 'luar',
+        ? "vdc"
+        : "luar",
 );
-const domainVdc = ref(domainVdcAwal ?? props.domain_saya[0] ?? '');
+const domainVdc = ref(domainVdcAwal ?? props.domain_saya[0] ?? "");
 const subVdc = ref(
     domainVdcAwal
-        ? (props.layanan.custom_domain ?? '').slice(
+        ? (props.layanan.custom_domain ?? "").slice(
               0,
               -(domainVdcAwal.length + 1),
           )
-        : '',
+        : "",
 );
 const gabungVdc = computed(
     () =>
         (subVdc.value.trim()
-            ? subVdc.value.trim().replace(/\.+$/, '') + '.'
-            : '') + domainVdc.value,
+            ? subVdc.value.trim().replace(/\.+$/, "") + "."
+            : "") + domainVdc.value,
 );
 const domainDariVdc = computed(() =>
     props.domain_saya.some(
         (d) =>
             props.layanan.custom_domain === d ||
-            props.layanan.custom_domain?.endsWith('.' + d),
+            props.layanan.custom_domain?.endsWith("." + d),
     ),
 );
+const PILIHAN_SUMBER = [
+    {
+        k: "vdc",
+        judul: "Beli di VDC",
+        ket: "Pilih dari daftar domain Anda. Belum punya akses DNS? Tim kami yang memasang.",
+    },
+    {
+        k: "luar",
+        judul: "Beli di tempat lain",
+        ket: "Ketik domainnya, lalu tambahkan A record sendiri di panel tempat Anda membeli domain.",
+    },
+] as const;
+// Domain utama dari custom domain, untuk mengisi kolom Nama/Host record DNS.
+const dasarDomain = computed(() => {
+    const d = props.layanan.custom_domain ?? "";
+    const vdc = props.domain_saya.find((x) => d === x || d.endsWith("." + x));
+    if (vdc) return vdc;
+    const l = d.split(".");
+    // shortcut: tebak TLD 2 tingkat (co.id, my.id) dari panjang label; TLD lain yang aneh bisa salah tebak, nama lengkap tetap tampil di judul
+    const n = l.length >= 3 && l[l.length - 2].length <= 3 && l[l.length - 1].length === 2 ? 3 : 2;
+
+    return l.slice(-n).join(".");
+});
+const hostRecord = computed(() => {
+    const d = props.layanan.custom_domain ?? "";
+
+    return d === dasarDomain.value ? "@" : d.slice(0, -(dasarDomain.value.length + 1));
+});
 type Token = {
     endpoint: string;
     model: string | null;
@@ -118,18 +146,23 @@ type Token = {
     }[];
 };
 type TrenToken = { label: string; request: number; token: number };
-const ukuranTren = ref<'token' | 'request'>('token');
-const namaUkuranTren = { token: 'Token', request: 'Request' };
-const angka = (n: number) => n.toLocaleString('id-ID');
+const ukuranTren = ref<"token" | "request">("token");
+// % terpakai dari total saldo yang pernah dibeli (sisa + terpakai), sama dengan Dashboard pelanggan
+const persenTerpakai = computed(() => {
+    const kuota = Math.max(0, props.token?.saldo ?? 0) + (props.token?.terpakai ?? 0);
+    return kuota > 0 ? Math.round(((props.token?.terpakai ?? 0) / kuota) * 1000) / 10 : 0;
+});
+const namaUkuranTren = { token: "Token", request: "Request" };
+const angka = (n: number) => n.toLocaleString("id-ID");
 const rupiahDesimal = (n: number) =>
-    'Rp' + n.toLocaleString('id-ID', { maximumFractionDigits: 2 }); // biaya per request bisa di bawah Rp1
+    "Rp" + n.toLocaleString("id-ID", { maximumFractionDigits: 2 }); // biaya per request bisa di bawah Rp1
 const contohCurl = computed(() =>
     props.token
         ? `curl ${props.token.endpoint}/chat/completions \\
   -H "Authorization: Bearer API_KEY_ANDA" \\
   -H "Content-Type: application/json" \\
   -d '{"model":"${props.token.model}","messages":[{"role":"user","content":"Halo"}]}'`
-        : '',
+        : "",
 );
 type Perangkat = {
     id: string | null;
@@ -140,45 +173,45 @@ type Perangkat = {
 defineOptions({
     layout: {
         breadcrumbs: [
-            { title: 'Layanan Saya', href: layananRoute.index() },
-            { title: 'Detail', href: '#' },
+            { title: "Layanan Saya", href: layananRoute.index() },
+            { title: "Detail", href: "#" },
         ],
     },
 });
 
 const lihatSandi = ref<Record<string, boolean>>({});
 const namaKredensial: Record<string, string> = {
-    pengguna: 'Pengguna',
-    sandi: 'Sandi / API key',
-    sandi_db: 'Sandi database',
-    api_key: 'API key',
+    pengguna: "Pengguna",
+    sandi: "Sandi / API key",
+    sandi_db: "Sandi database",
+    api_key: "API key",
 };
 const namaSpek: Record<string, string> = {
-    cpu: 'CPU',
-    ram: 'RAM',
-    disk: 'Storage',
-    bandwidth: 'Bandwidth',
+    cpu: "CPU",
+    ram: "RAM",
+    disk: "Storage",
+    bandwidth: "Bandwidth",
 };
 const spek = Object.entries(props.layanan.spek ?? {}).filter(
-    ([k]) => k !== 'kategori_app',
+    ([k]) => k !== "kategori_app",
 );
-const bisaAksi = props.layanan.kontrol && props.layanan.status === 'aktif';
+const bisaAksi = props.layanan.kontrol && props.layanan.status === "aktif";
 
 // Status pod dari agent: Running = menyala; Exited/Stopped = mati; lainnya (Created/Degraded) = sedang berubah.
-const menyala = computed(() => props.pod?.status === 'Running');
+const menyala = computed(() => props.pod?.status === "Running");
 const statusPod = computed(() => {
-    if (!props.pod) return { status: 'disiapkan', label: 'Memuat status…' };
+    if (!props.pod) return { status: "disiapkan", label: "Memuat status…" };
     if (props.pod.galat)
-        return { status: 'gagal', label: 'Status tidak terbaca' };
-    if (menyala.value) return { status: 'aktif', label: 'Menyala' };
-    if (['Exited', 'Stopped'].includes(props.pod.status ?? ''))
-        return { status: 'nonaktif', label: 'Mati' };
-    return { status: 'disiapkan', label: props.pod.status ?? '-' };
+        return { status: "gagal", label: "Status tidak terbaca" };
+    if (menyala.value) return { status: "aktif", label: "Menyala" };
+    if (["Exited", "Stopped"].includes(props.pod.status ?? ""))
+        return { status: "nonaktif", label: "Mati" };
+    return { status: "disiapkan", label: props.pod.status ?? "-" };
 });
 const pemakaian = computed(() =>
-    (props.pod?.pemakaian ?? []).filter((p) => !p.container.endsWith('-infra')),
+    (props.pod?.pemakaian ?? []).filter((p) => !p.container.endsWith("-infra")),
 );
-const singkat = (nama: string) => nama.replace(/^svc-\d+-/, '');
+const singkat = (nama: string) => nama.replace(/^svc-\d+-/, "");
 
 // Status realtime: dimuat ulang tiap 5 dtk selama tab terlihat (pod/VM dari agent atau Incus). Tanpa tumpukan permintaan.
 const sibuk = ref(false);
@@ -189,21 +222,21 @@ function segarkan() {
     if (document.hidden || memuatStatus) return;
     memuatStatus = true;
     router.reload({
-        only: ['pod'],
+        only: ["pod"],
         onSuccess: () => (terakhir.value = new Date()),
         onFinish: () => (memuatStatus = false),
     });
 }
 // Analitik VPS: live = titik dari polling 5 dtk di browser (60 titik terakhir); rentang lain = sampel per menit dari server.
 const punyaAnalitik = !props.layanan.is_app && bisaAksi;
-const rentang = ref('live');
+const rentang = ref("live");
 const memuatRiwayat = ref(false);
 const live = ref<TitikMetrik[]>([]);
 const vcpu = Math.max(
     1,
-    parseInt(String(props.layanan.spek?.cpu ?? '1'), 10) || 1,
+    parseInt(String(props.layanan.spek?.cpu ?? "1"), 10) || 1,
 );
-let lalu: NonNullable<Pod['metrik']> | null = null;
+let lalu: NonNullable<Pod["metrik"]> | null = null;
 watch(
     () => props.pod?.metrik,
     (m) => {
@@ -236,7 +269,7 @@ watch(
     { immediate: true },
 );
 const titikAnalitik = computed(() =>
-    rentang.value === 'live'
+    rentang.value === "live"
         ? live.value
         : props.riwayat?.rentang === rentang.value
           ? props.riwayat.titik
@@ -244,10 +277,10 @@ const titikAnalitik = computed(() =>
 );
 function pilihRentang(r: string) {
     rentang.value = r;
-    if (r === 'live') return;
+    if (r === "live") return;
     memuatRiwayat.value = true;
     router.reload({
-        only: ['riwayat'],
+        only: ["riwayat"],
         data: { rentang: r },
         onFinish: () => (memuatRiwayat.value = false),
     });
@@ -257,7 +290,7 @@ onMounted(() => {
     if (bisaAksi) detak = setInterval(segarkan, 5000);
 });
 onUnmounted(() => clearInterval(detak));
-function aksi(a: 'start' | 'stop' | 'restart') {
+function aksi(a: "start" | "stop" | "restart") {
     sibuk.value = true;
     router.post(
         LayananController.aksi(props.layanan.id).url,
@@ -278,7 +311,7 @@ function muatPerangkat() {
     memuatPerangkat.value = true;
     sudahMuatPerangkat.value = true;
     router.reload({
-        only: ['perangkat'],
+        only: ["perangkat"],
         onFinish: () => (memuatPerangkat.value = false),
     });
 }
@@ -297,14 +330,47 @@ function setujui(id: string) {
     );
 }
 const waktu = (w: string | null) =>
-    w ? new Date(w).toLocaleString('id-ID') : '';
+    w ? new Date(w).toLocaleString("id-ID") : "";
 
 const lihatLog = ref(false);
 const memuatLog = ref(false);
 function muatLog() {
     lihatLog.value = true;
     memuatLog.value = true;
-    router.reload({ only: ['log'], onFinish: () => (memuatLog.value = false) });
+    router.reload({ only: ["log"], onFinish: () => (memuatLog.value = false) });
+}
+
+// Tab detail layanan; tab terpilih disimpan di hash URL agar bertahan saat muat ulang.
+const daftarTab = computed(() =>
+    [
+        { id: "ringkasan", label: "Ringkasan", ada: true },
+        {
+            id: "token",
+            label: "Token AI",
+            ada: !!props.token && props.layanan.status === "aktif",
+        },
+        {
+            id: "kontrol",
+            label: "Kelola",
+            ada: !!props.layanan.kontrol,
+        },
+        {
+            id: "domain",
+            label: "Custom domain",
+            ada:
+                !!props.layanan.domain_didukung &&
+                props.layanan.status === "aktif",
+        },
+        { id: "tagihan", label: "Riwayat tagihan", ada: true },
+    ].filter((t) => t.ada),
+);
+const tab = ref(window.location.hash.slice(1));
+const tabAktif = computed(() =>
+    daftarTab.value.some((t) => t.id === tab.value) ? tab.value : "ringkasan",
+);
+function pilihTab(id: string) {
+    tab.value = id;
+    history.replaceState(history.state, "", "#" + id);
 }
 </script>
 
@@ -321,7 +387,24 @@ function muatLog() {
             />
         </PageHeader>
 
-        <div class="grid gap-6 lg:grid-cols-2">
+        <div
+            class="flex gap-2 overflow-x-auto border-b border-border pb-3"
+            role="tablist"
+        >
+            <Button
+                v-for="t in daftarTab"
+                :key="t.id"
+                role="tab"
+                size="sm"
+                class="shrink-0"
+                :aria-selected="tabAktif === t.id"
+                :variant="tabAktif === t.id ? 'default' : 'outline'"
+                @click="pilihTab(t.id)"
+                >{{ t.label }}</Button
+            >
+        </div>
+
+        <div v-if="tabAktif === 'ringkasan'" class="grid gap-6 lg:grid-cols-2">
             <section class="rounded-lg border border-border">
                 <h2
                     class="border-b border-border px-5 py-3 font-semibold text-ink"
@@ -364,7 +447,7 @@ function muatLog() {
                             </dt>
                             <dd class="flex items-start gap-2">
                                 <span class="min-w-0 font-mono break-all">{{
-                                    lihatSandi[kunci] ? nilai : '••••••••••••'
+                                    lihatSandi[kunci] ? nilai : "••••••••••••"
                                 }}</span>
                                 <button
                                     type="button"
@@ -438,14 +521,14 @@ function muatLog() {
                     >
                         {{
                             layanan.is_app
-                                ? 'Container sedang dibuat. Muat ulang halaman ini beberapa saat lagi.'
+                                ? "Container sedang dibuat. Muat ulang halaman ini beberapa saat lagi."
                                 : layanan.is_hosting
-                                  ? 'Akun hosting sedang dibuat (±1 menit). Muat ulang halaman ini beberapa saat lagi.'
+                                  ? "Akun hosting sedang dibuat (±1 menit). Muat ulang halaman ini beberapa saat lagi."
                                   : layanan.is_domain
-                                    ? 'Domain sedang didaftarkan ke registrar (±1 menit). Muat ulang halaman ini beberapa saat lagi.'
+                                    ? "Domain sedang didaftarkan ke registrar (±1 menit). Muat ulang halaman ini beberapa saat lagi."
                                     : layanan.otomatis
-                                      ? 'VPS sedang dibuat (±2-5 menit). Muat ulang halaman ini beberapa saat lagi.'
-                                      : 'Tim kami sedang menyiapkan server Anda. Info akses muncul di sini setelah siap.'
+                                      ? "VPS sedang dibuat (±2-5 menit). Muat ulang halaman ini beberapa saat lagi."
+                                      : "Tim kami sedang menyiapkan server Anda. Info akses muncul di sini setelah siap."
                         }}
                     </p>
                     <p
@@ -478,12 +561,12 @@ function muatLog() {
                             {{ rupiah(token ? token.harga : layanan.harga)
                             }}{{
                                 token
-                                    ? '/1 juta token output'
-                                    : layanan.kategori === 'hosting'
-                                      ? '/tahun'
-                                      : layanan.kategori === 'domain'
-                                        ? ''
-                                        : '/bulan'
+                                    ? "/1 juta token output"
+                                    : layanan.kategori === "hosting"
+                                      ? "/tahun"
+                                      : layanan.kategori === "domain"
+                                        ? ""
+                                        : "/bulan"
                             }}
                         </dd>
                     </div>
@@ -539,12 +622,72 @@ function muatLog() {
         </div>
 
         <section
-            v-if="token && layanan.status === 'aktif'"
+            v-if="token && tabAktif === 'token'"
             class="rounded-lg border border-border"
         >
             <h2 class="border-b border-border px-5 py-3 font-semibold text-ink">
                 Token AI
             </h2>
+            <div class="border-b border-border px-5 py-4 text-sm">
+                <dl class="grid grid-cols-2 gap-4 tabular-nums">
+                    <div>
+                        <dt class="text-muted-foreground">Sisa saldo</dt>
+                        <dd
+                            class="font-heading text-2xl font-bold"
+                            :class="
+                                token.saldo > 0
+                                    ? 'text-ink'
+                                    : 'text-red-700'
+                            "
+                        >
+                            {{ angka(Math.max(0, token.saldo)) }}
+                        </dd>
+                        <dd class="text-xs text-muted-foreground">
+                            token<template v-if="token.saldo > 0">
+                                · setara
+                                {{
+                                    rupiahDesimal(
+                                        Math.floor(
+                                            (token.saldo *
+                                                (token.harga ?? 0)) /
+                                                1_000_000,
+                                        ),
+                                    )
+                                }}</template
+                            >
+                        </dd>
+                    </div>
+                    <div>
+                        <dt class="text-muted-foreground">Terpakai</dt>
+                        <dd
+                            class="font-heading text-2xl font-bold text-ink"
+                        >
+                            {{ angka(token.terpakai) }}
+                        </dd>
+                        <dd class="text-xs text-muted-foreground">token</dd>
+                    </div>
+                </dl>
+                <div class="mt-4">
+                    <div class="mb-1 flex justify-between text-xs text-muted-foreground tabular-nums">
+                        <span>Terpakai {{ persenTerpakai }}%</span>
+                        <span>Sisa {{ Math.round((100 - persenTerpakai) * 10) / 10 }}%</span>
+                    </div>
+                    <div
+                        class="h-2 overflow-hidden rounded-full bg-slate-100"
+                        role="progressbar"
+                        :aria-valuenow="persenTerpakai"
+                        aria-valuemin="0"
+                        aria-valuemax="100"
+                        aria-label="Persentase saldo token terpakai"
+                    >
+                        <div
+                            class="h-full rounded-full"
+                            :class="persenTerpakai >= 90 ? 'bg-red-600' : persenTerpakai >= 75 ? 'bg-amber-500' : 'bg-brand-600'"
+                            :style="{ width: `${Math.min(100, persenTerpakai)}%` }"
+                        />
+                    </div>
+                </div>
+            </div>
             <div class="border-b border-border px-5 py-4">
                 <div
                     class="mb-4 flex flex-wrap items-center justify-between gap-3"
@@ -586,44 +729,6 @@ function muatLog() {
             </div>
             <div class="grid gap-6 px-5 py-4 text-sm lg:grid-cols-2">
                 <div class="space-y-4">
-                    <dl class="grid grid-cols-2 gap-4 tabular-nums">
-                        <div>
-                            <dt class="text-muted-foreground">Sisa saldo</dt>
-                            <dd
-                                class="font-heading text-2xl font-bold"
-                                :class="
-                                    token.saldo > 0
-                                        ? 'text-ink'
-                                        : 'text-red-700'
-                                "
-                            >
-                                {{ angka(Math.max(0, token.saldo)) }}
-                            </dd>
-                            <dd class="text-xs text-muted-foreground">
-                                token<template v-if="token.saldo > 0">
-                                    · setara
-                                    {{
-                                        rupiahDesimal(
-                                            Math.floor(
-                                                (token.saldo *
-                                                    (token.harga ?? 0)) /
-                                                    1_000_000,
-                                            ),
-                                        )
-                                    }}</template
-                                >
-                            </dd>
-                        </div>
-                        <div>
-                            <dt class="text-muted-foreground">Terpakai</dt>
-                            <dd
-                                class="font-heading text-2xl font-bold text-ink"
-                            >
-                                {{ angka(token.terpakai) }}
-                            </dd>
-                            <dd class="text-xs text-muted-foreground">token</dd>
-                        </div>
-                    </dl>
                     <p class="text-muted-foreground">
                         Kompatibel OpenAI: isi Base URL dan API key di aplikasi
                         atau SDK OpenAI.
@@ -759,7 +864,7 @@ function muatLog() {
         </section>
 
         <section
-            v-if="layanan.domain_didukung && layanan.status === 'aktif'"
+            v-if="tabAktif === 'domain'"
             class="rounded-lg border border-border"
         >
             <div
@@ -778,34 +883,55 @@ function muatLog() {
                     "
                 />
             </div>
-            <div class="space-y-4 px-5 py-4 text-sm">
+            <div class="space-y-6 px-5 py-4 text-sm">
+                <fieldset class="space-y-2">
+                    <legend class="mb-2 font-semibold text-ink">
+                        1. Domain Anda dibeli di mana?
+                    </legend>
+                    <div class="grid gap-2 sm:grid-cols-2">
+                        <label
+                            v-for="p in PILIHAN_SUMBER"
+                            :key="p.k"
+                            class="flex cursor-pointer gap-3 rounded-lg border p-3"
+                            :class="
+                                sumberDomain === p.k
+                                    ? 'border-brand-700 bg-brand-50'
+                                    : 'border-border hover:bg-muted/50'
+                            "
+                        >
+                            <input
+                                v-model="sumberDomain"
+                                type="radio"
+                                name="sumber_domain"
+                                :value="p.k"
+                                class="mt-0.5 size-4 shrink-0 accent-brand-700"
+                            />
+                            <span>
+                                <span class="block font-semibold text-ink">{{
+                                    p.judul
+                                }}</span>
+                                <span
+                                    class="mt-0.5 block text-xs text-muted-foreground"
+                                    >{{ p.ket }}</span
+                                >
+                            </span>
+                        </label>
+                    </div>
+                </fieldset>
+
                 <Form
                     v-bind="LayananController.domain.form(layanan.id)"
-                    class="space-y-3"
+                    class="space-y-2"
                     v-slot="{ errors, processing }"
                 >
-                    <div
-                        class="flex flex-wrap gap-2"
-                        role="group"
-                        aria-label="Sumber domain"
-                    >
-                        <Button
-                            v-for="(nama, k) in {
-                                vdc: 'Domain dari VDC',
-                                luar: 'Domain dari luar',
-                            }"
-                            :key="k"
-                            type="button"
-                            size="sm"
-                            :variant="
-                                sumberDomain === k ? 'default' : 'outline'
-                            "
-                            :aria-pressed="sumberDomain === k"
-                            @click="sumberDomain = k"
-                        >
-                            {{ nama }}
-                        </Button>
-                    </div>
+                    <p class="font-semibold text-ink">
+                        2.
+                        {{
+                            sumberDomain === "vdc"
+                                ? "Pilih domain"
+                                : "Ketik domain"
+                        }}
+                    </p>
                     <template v-if="sumberDomain === 'vdc'">
                         <template v-if="domain_saya.length">
                             <input
@@ -858,18 +984,16 @@ function muatLog() {
                                 class="text-brand-700 underline"
                                 >Beli domain</Link
                             >
-                            atau pilih <b>Domain dari luar</b>.
+                            atau pilih <b>Beli di tempat lain</b>.
                         </p>
                     </template>
                     <template v-else>
-                        <Label for="domain" class="font-semibold text-ink"
-                            >Domain Anda</Label
-                        >
                         <div class="flex flex-wrap gap-2">
                             <Input
                                 id="domain"
                                 name="domain"
-                                placeholder="toko.contoh.com"
+                                aria-label="Domain Anda"
+                                placeholder="contoh.com atau toko.contoh.com"
                                 :default-value="
                                     domainDariVdc
                                         ? ''
@@ -901,57 +1025,145 @@ function muatLog() {
                 >
                     Lepas domain
                 </Button>
-                <template v-if="layanan.custom_domain">
-                    <div
-                        v-if="layanan.relay_ip"
-                        class="space-y-1 rounded-md bg-muted/50 p-3"
+
+                <div v-if="layanan.custom_domain" class="space-y-3">
+                    <p
+                        class="flex flex-wrap items-center gap-2 font-semibold text-ink"
                     >
-                        <p class="font-semibold text-ink">
-                            {{
-                                domainDariVdc
-                                    ? 'Atur DNS domain Anda'
-                                    : 'Atur DNS di penyedia domain Anda'
-                            }}
-                        </p>
-                        <p>
-                            Buat <b>A record</b> untuk
-                            <code>{{ layanan.custom_domain }}</code> ke
-                            <code>{{ layanan.relay_ip }}</code>
-                            <TombolSalin
-                                :teks="layanan.relay_ip"
-                                label="Salin IP"
-                                ikon
-                            />
-                        </p>
+                        3. Hubungkan DNS
+                        <code
+                            class="rounded bg-muted px-1.5 py-0.5 font-normal"
+                            >{{ layanan.custom_domain }}</code
+                        >
+                        <span
+                            class="rounded-full border border-border px-2 py-0.5 text-xs font-normal text-muted-foreground"
+                            >{{
+                                domainDariVdc ? "Domain VDC" : "Domain luar"
+                            }}</span
+                        >
+                    </p>
+                    <template v-if="layanan.relay_ip">
+                        <div class="overflow-x-auto rounded-md border border-border">
+                            <table class="w-full text-left text-sm">
+                                <thead
+                                    class="bg-muted/50 text-xs text-muted-foreground"
+                                >
+                                    <tr>
+                                        <th class="px-3 py-2 font-medium">Tipe</th>
+                                        <th class="px-3 py-2 font-medium">
+                                            Nama / Host
+                                        </th>
+                                        <th class="px-3 py-2 font-medium">
+                                            Nilai / IP
+                                        </th>
+                                        <th class="px-3 py-2 font-medium">TTL</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr class="border-t border-border">
+                                        <td class="px-3 py-2"><code>A</code></td>
+                                        <td class="px-3 py-2">
+                                            <code>{{ hostRecord }}</code>
+                                            <TombolSalin
+                                                :teks="hostRecord"
+                                                label="Salin nama"
+                                                ikon
+                                            />
+                                        </td>
+                                        <td class="px-3 py-2 whitespace-nowrap">
+                                            <code>{{ layanan.relay_ip }}</code>
+                                            <TombolSalin
+                                                :teks="layanan.relay_ip"
+                                                label="Salin IP"
+                                                ikon
+                                            />
+                                        </td>
+                                        <td class="px-3 py-2">Otomatis</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
                         <p
+                            v-if="hostRecord === '@'"
+                            class="text-xs text-muted-foreground"
+                        >
+                            <code>@</code> = domain utama
+                            <code>{{ layanan.custom_domain }}</code>. Sebagian
+                            panel meminta nama dikosongkan atau diisi domain
+                            lengkap.
+                        </p>
+                        <div
                             v-if="domainDariVdc"
-                            class="text-xs text-muted-foreground"
+                            class="space-y-2 rounded-md bg-brand-50 p-3"
                         >
-                            Domain dibeli di VDC: bila belum punya akses
-                            pengaturan DNS, kirim
-                            <Link
-                                :href="tiketRoute.index()"
-                                class="text-brand-700 underline"
-                                >Support Ticket</Link
-                            >
-                            berisi domain dan IP di atas, tim kami yang
-                            membuatkan A record.
-                        </p>
-                        <p
-                            v-if="layanan.domain_relay"
-                            class="text-xs text-muted-foreground"
+                            <p class="text-ink">
+                                Domain ini dibeli di VDC. Belum punya akses
+                                pengaturan DNS? Tim kami yang membuatkan record
+                                di atas.
+                            </p>
+                            <Button as-child size="sm" variant="outline">
+                                <Link :href="tiketRoute.index()"
+                                    >Minta tim pasang DNS</Link
+                                >
+                            </Button>
+                            <p class="text-xs text-muted-foreground">
+                                Sebutkan domain
+                                <code>{{ layanan.custom_domain }}</code> dan IP
+                                <code>{{ layanan.relay_ip }}</code> di tiket.
+                            </p>
+                        </div>
+                        <ol
+                            v-else
+                            class="list-decimal space-y-1 rounded-md bg-muted/50 py-3 pr-3 pl-8"
                         >
-                            Jika memakai Cloudflare, matikan proxy (awan
-                            abu-abu) dulu. SSL gratis diterbitkan otomatis
-                            setelah DNS terhubung.
-                        </p>
-                    </div>
+                            <li>
+                                Masuk ke panel tempat Anda membeli domain.
+                            </li>
+                            <li>
+                                Buka menu pengaturan DNS (biasanya bernama
+                                <i>DNS Management</i> / <i>Kelola DNS</i>).
+                            </li>
+                            <li>
+                                Tambah record sesuai tabel di atas. Bila sudah
+                                ada A record dengan nama yang sama, ubah IP-nya.
+                            </li>
+                            <li v-if="layanan.domain_relay">
+                                Memakai Cloudflare? Matikan proxy (awan
+                                abu-abu).
+                            </li>
+                        </ol>
+                    </template>
                     <p v-else class="text-muted-foreground">
                         Domain sudah dicatat. Tim kami akan menghubungi Anda
                         untuk langkah penyambungan.
                     </p>
+                </div>
+
+                <div
+                    v-if="layanan.custom_domain && layanan.domain_relay"
+                    class="space-y-2"
+                >
+                    <p class="font-semibold text-ink">4. Periksa koneksi</p>
+                    <p
+                        v-if="layanan.custom_domain_aktif"
+                        class="flex flex-wrap items-center gap-1.5 text-volt-700"
+                    >
+                        <Check class="size-4" aria-hidden="true" />
+                        Terhubung, SSL aktif:
+                        <a
+                            class="text-brand-700 underline"
+                            :href="'https://' + layanan.custom_domain"
+                            target="_blank"
+                            rel="noopener"
+                            >https://{{ layanan.custom_domain }}</a
+                        >
+                    </p>
+                    <p v-else class="text-muted-foreground">
+                        Setelah record dibuat, klik Periksa DNS. Perubahan DNS
+                        bisa butuh beberapa menit. SSL gratis diterbitkan
+                        otomatis setelah terhubung.
+                    </p>
                     <Button
-                        v-if="layanan.domain_relay"
                         size="sm"
                         variant="outline"
                         @click="
@@ -965,21 +1177,7 @@ function muatLog() {
                         <Search aria-hidden="true" />Periksa DNS
                     </Button>
                     <p
-                        v-if="
-                            layanan.domain_relay && layanan.custom_domain_aktif
-                        "
-                    >
-                        Alamat:
-                        <a
-                            class="text-brand-700 underline"
-                            :href="'https://' + layanan.custom_domain"
-                            target="_blank"
-                            rel="noopener"
-                            >https://{{ layanan.custom_domain }}</a
-                        >
-                    </p>
-                    <p
-                        v-if="layanan.domain_relay && !layanan.is_app"
+                        v-if="!layanan.is_app"
                         class="text-xs text-muted-foreground"
                     >
                         Pasang web server (nginx/Apache/aaPanel) di VPS pada
@@ -988,235 +1186,256 @@ function muatLog() {
                         <code>X-Forwarded-Proto: https</code> dan
                         <code>X-Forwarded-For</code> berisi IP pengunjung.
                     </p>
-                    <p
-                        v-if="layanan.is_app"
-                        class="text-xs text-muted-foreground"
-                    >
-                        Catatan: sebagian app (mis. WordPress) menyimpan alamat
-                        situs sendiri; ubah alamat itu di pengaturan app ke
-                        domain Anda.
-                    </p>
-                </template>
+                </div>
+                <p
+                    v-if="layanan.custom_domain && layanan.is_app"
+                    class="text-xs text-muted-foreground"
+                >
+                    Catatan: sebagian app (mis. WordPress) menyimpan alamat
+                    situs sendiri; ubah alamat itu di pengaturan app ke domain
+                    Anda.
+                </p>
             </div>
         </section>
 
-        <AnalitikVps
-            v-if="punyaAnalitik"
-            :titik="titikAnalitik"
-            :rentang="rentang"
-            :memuat="memuatRiwayat"
-            @rentang="pilihRentang"
-        />
-
-        <section v-if="bisaAksi" class="rounded-lg border border-border">
-            <div
-                class="flex flex-wrap items-center justify-between gap-3 border-b border-border px-5 py-3"
+        <template v-if="tabAktif === 'kontrol'">
+            <p
+                v-if="!bisaAksi"
+                class="rounded-lg border border-border px-5 py-4 text-sm text-muted-foreground"
             >
-                <div class="flex items-center gap-3">
-                    <h2 class="font-semibold text-ink">
-                        {{ layanan.is_app ? 'Kontrol app' : 'Kontrol VPS' }}
-                    </h2>
-                    <StatusBadge v-bind="statusPod" />
-                    <span
-                        class="flex items-center gap-1.5 text-xs text-muted-foreground"
-                        aria-live="off"
-                    >
+                Kontrol {{ layanan.is_app ? "app" : "VPS" }} tersedia saat
+                layanan aktif. Status sekarang:
+                <strong class="text-ink">{{ layanan.status_label }}</strong>.
+            </p>
+            <AnalitikVps
+                v-if="punyaAnalitik"
+                :titik="titikAnalitik"
+                :rentang="rentang"
+                :memuat="memuatRiwayat"
+                @rentang="pilihRentang"
+            />
+
+            <section v-if="bisaAksi" class="rounded-lg border border-border">
+                <div
+                    class="flex flex-wrap items-center justify-between gap-3 border-b border-border px-5 py-3"
+                >
+                    <div class="flex items-center gap-3">
+                        <h2 class="font-semibold text-ink">
+                            {{ layanan.is_app ? "Kontrol app" : "Kontrol VPS" }}
+                        </h2>
+                        <StatusBadge v-bind="statusPod" />
                         <span
-                            class="size-1.5 animate-pulse rounded-full bg-volt"
-                        />
-                        Live<template v-if="terakhir">
-                            ·
-                            {{ terakhir.toLocaleTimeString('id-ID') }}</template
-                        >
-                    </span>
-                </div>
-                <div class="flex flex-wrap items-center gap-2">
-                    <button
-                        type="button"
-                        role="switch"
-                        :aria-checked="menyala"
-                        aria-label="Nyalakan atau matikan layanan"
-                        :disabled="sibuk || !pod || !!pod.galat"
-                        class="inline-flex items-center gap-2 text-sm font-semibold disabled:opacity-50"
-                        @click="aksi(menyala ? 'stop' : 'start')"
-                    >
-                        <Power class="size-4" aria-hidden="true" />
-                        <span
-                            class="relative inline-block h-6 w-11 rounded-full transition-colors"
-                            :class="
-                                menyala
-                                    ? 'bg-brand-700'
-                                    : 'bg-muted-foreground/30'
-                            "
+                            class="flex items-center gap-1.5 text-xs text-muted-foreground"
+                            aria-live="off"
                         >
                             <span
-                                class="absolute top-0.5 left-0.5 size-5 rounded-full bg-white transition-transform"
-                                :class="menyala ? 'translate-x-5' : ''"
+                                class="size-1.5 animate-pulse rounded-full bg-volt"
                             />
-                        </span>
-                        {{ menyala ? 'On' : 'Off' }}
-                    </button>
-                    <Button
-                        size="sm"
-                        variant="outline"
-                        :disabled="sibuk || !menyala"
-                        @click="aksi('restart')"
-                        ><RotateCw aria-hidden="true" />Restart</Button
-                    >
-                    <Button size="sm" variant="outline" @click="segarkan"
-                        ><RefreshCw aria-hidden="true" />Segarkan</Button
-                    >
-                </div>
-            </div>
-            <div class="space-y-4 px-5 py-4 text-sm">
-                <p v-if="pod?.galat" class="text-red-700">{{ pod.galat }}</p>
-                <dl
-                    v-if="pod?.info && Object.keys(pod.info).length"
-                    class="grid grid-cols-2 gap-3 tabular-nums sm:grid-cols-4"
-                >
-                    <div
-                        v-for="(nilai, nama) in pod.info"
-                        :key="nama"
-                        class="rounded-md bg-muted/50 px-3 py-2"
-                    >
-                        <dt class="text-xs text-muted-foreground">
-                            {{ nama }}
-                        </dt>
-                        <dd class="font-semibold text-ink">{{ nilai }}</dd>
-                    </div>
-                </dl>
-                <table v-if="pemakaian.length" class="w-full tabular-nums">
-                    <thead class="text-xs text-muted-foreground">
-                        <tr>
-                            <th class="py-1 text-left font-medium">Komponen</th>
-                            <th class="py-1 text-right font-medium">CPU</th>
-                            <th class="py-1 text-right font-medium">RAM</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr
-                            v-for="p in pemakaian"
-                            :key="p.container"
-                            class="border-t border-border"
-                        >
-                            <td class="py-1.5">{{ singkat(p.container) }}</td>
-                            <td class="py-1.5 text-right">{{ p.cpu }}</td>
-                            <td class="py-1.5 text-right">
-                                {{ p.memori.split(' / ')[0] }}
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
-                <div v-if="layanan.is_app">
-                    <Button
-                        size="sm"
-                        variant="outline"
-                        :disabled="memuatLog"
-                        @click="muatLog"
-                        ><ScrollText aria-hidden="true" />{{
-                            lihatLog ? 'Muat ulang log' : 'Lihat log'
-                        }}</Button
-                    >
-                    <div v-if="lihatLog" class="mt-3 space-y-3">
-                        <p
-                            v-if="memuatLog && !log"
-                            class="text-muted-foreground"
-                        >
-                            Memuat log…
-                        </p>
-                        <div v-for="(isi, nama) in log ?? {}" :key="nama">
-                            <p
-                                class="mb-1 text-xs font-semibold text-muted-foreground"
+                            Live<template v-if="terakhir">
+                                ·
+                                {{
+                                    terakhir.toLocaleTimeString("id-ID")
+                                }}</template
                             >
-                                {{ singkat(String(nama)) }}
+                        </span>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-2">
+                        <button
+                            type="button"
+                            role="switch"
+                            :aria-checked="menyala"
+                            aria-label="Nyalakan atau matikan layanan"
+                            :disabled="sibuk || !pod || !!pod.galat"
+                            class="inline-flex items-center gap-2 text-sm font-semibold disabled:opacity-50"
+                            @click="aksi(menyala ? 'stop' : 'start')"
+                        >
+                            <Power class="size-4" aria-hidden="true" />
+                            <span
+                                class="relative inline-block h-6 w-11 rounded-full transition-colors"
+                                :class="
+                                    menyala
+                                        ? 'bg-brand-700'
+                                        : 'bg-muted-foreground/30'
+                                "
+                            >
+                                <span
+                                    class="absolute top-0.5 left-0.5 size-5 rounded-full bg-white transition-transform"
+                                    :class="menyala ? 'translate-x-5' : ''"
+                                />
+                            </span>
+                            {{ menyala ? "On" : "Off" }}
+                        </button>
+                        <Button
+                            size="sm"
+                            variant="outline"
+                            :disabled="sibuk || !menyala"
+                            @click="aksi('restart')"
+                            ><RotateCw aria-hidden="true" />Restart</Button
+                        >
+                        <Button size="sm" variant="outline" @click="segarkan"
+                            ><RefreshCw aria-hidden="true" />Segarkan</Button
+                        >
+                    </div>
+                </div>
+                <div class="space-y-4 px-5 py-4 text-sm">
+                    <p v-if="pod?.galat" class="text-red-700">
+                        {{ pod.galat }}
+                    </p>
+                    <dl
+                        v-if="pod?.info && Object.keys(pod.info).length"
+                        class="grid grid-cols-2 gap-3 tabular-nums sm:grid-cols-4"
+                    >
+                        <div
+                            v-for="(nilai, nama) in pod.info"
+                            :key="nama"
+                            class="rounded-md bg-muted/50 px-3 py-2"
+                        >
+                            <dt class="text-xs text-muted-foreground">
+                                {{ nama }}
+                            </dt>
+                            <dd class="font-semibold text-ink">{{ nilai }}</dd>
+                        </div>
+                    </dl>
+                    <table v-if="pemakaian.length" class="w-full tabular-nums">
+                        <thead class="text-xs text-muted-foreground">
+                            <tr>
+                                <th class="py-1 text-left font-medium">
+                                    Komponen
+                                </th>
+                                <th class="py-1 text-right font-medium">CPU</th>
+                                <th class="py-1 text-right font-medium">RAM</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr
+                                v-for="p in pemakaian"
+                                :key="p.container"
+                                class="border-t border-border"
+                            >
+                                <td class="py-1.5">
+                                    {{ singkat(p.container) }}
+                                </td>
+                                <td class="py-1.5 text-right">{{ p.cpu }}</td>
+                                <td class="py-1.5 text-right">
+                                    {{ p.memori.split(" / ")[0] }}
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    <div v-if="layanan.is_app">
+                        <Button
+                            size="sm"
+                            variant="outline"
+                            :disabled="memuatLog"
+                            @click="muatLog"
+                            ><ScrollText aria-hidden="true" />{{
+                                lihatLog ? "Muat ulang log" : "Lihat log"
+                            }}</Button
+                        >
+                        <div v-if="lihatLog" class="mt-3 space-y-3">
+                            <p
+                                v-if="memuatLog && !log"
+                                class="text-muted-foreground"
+                            >
+                                Memuat log…
                             </p>
-                            <pre
-                                class="max-h-80 overflow-auto rounded-md bg-slate-950 p-3 font-mono text-xs leading-relaxed [overflow-wrap:anywhere] whitespace-pre-wrap text-slate-100"
-                                >{{ isi || '(kosong)' }}</pre>
+                            <div v-for="(isi, nama) in log ?? {}" :key="nama">
+                                <p
+                                    class="mb-1 text-xs font-semibold text-muted-foreground"
+                                >
+                                    {{ singkat(String(nama)) }}
+                                </p>
+                                <pre
+                                    class="max-h-80 overflow-auto rounded-md bg-slate-950 p-3 font-mono text-xs leading-relaxed [overflow-wrap:anywhere] whitespace-pre-wrap text-slate-100"
+                                    >{{ isi || "(kosong)" }}</pre>
+                            </div>
                         </div>
                     </div>
                 </div>
-            </div>
-        </section>
+            </section>
 
-        <section
-            v-if="bisaAksi && layanan.pairing"
-            class="rounded-lg border border-border"
-        >
-            <div
-                class="flex flex-wrap items-center justify-between gap-3 border-b border-border px-5 py-3"
+            <section
+                v-if="bisaAksi && layanan.pairing"
+                class="rounded-lg border border-border"
             >
-                <h2 class="font-semibold text-ink">Perangkat</h2>
-                <Button
-                    size="sm"
-                    variant="outline"
-                    :disabled="memuatPerangkat"
-                    @click="muatPerangkat"
-                    ><Search aria-hidden="true" />{{
-                        memuatPerangkat ? 'Memuat…' : 'Cek permintaan'
-                    }}</Button
+                <div
+                    class="flex flex-wrap items-center justify-between gap-3 border-b border-border px-5 py-3"
                 >
-            </div>
-            <div class="space-y-4 px-5 py-4 text-sm">
-                <p class="text-muted-foreground">
-                    Buka alamat app, tempel sandi di kolom Gateway Token, lalu
-                    klik Connect. Browser baru akan menunggu persetujuan: klik
-                    <strong class="text-ink">Cek permintaan</strong> di sini dan
-                    setujui browser Anda.
-                </p>
-                <p v-if="perangkat?.galat" class="text-red-700">
-                    {{ perangkat.galat }}
-                </p>
-                <template v-else-if="perangkat && sudahMuatPerangkat">
-                    <p
-                        v-if="!perangkat.menunggu?.length"
-                        class="text-muted-foreground"
+                    <h2 class="font-semibold text-ink">Perangkat</h2>
+                    <Button
+                        size="sm"
+                        variant="outline"
+                        :disabled="memuatPerangkat"
+                        @click="muatPerangkat"
+                        ><Search aria-hidden="true" />{{
+                            memuatPerangkat ? "Memuat…" : "Cek permintaan"
+                        }}</Button
                     >
-                        Tidak ada permintaan yang menunggu.
+                </div>
+                <div class="space-y-4 px-5 py-4 text-sm">
+                    <p class="text-muted-foreground">
+                        Buka alamat app, tempel sandi di kolom Gateway Token,
+                        lalu klik Connect. Browser baru akan menunggu
+                        persetujuan: klik
+                        <strong class="text-ink">Cek permintaan</strong> di sini
+                        dan setujui browser Anda.
                     </p>
-                    <ul
-                        v-else
-                        class="divide-y divide-border rounded-md border border-border"
-                    >
-                        <li
-                            v-for="d in perangkat.menunggu"
-                            :key="d.id ?? d.nama"
-                            class="flex flex-wrap items-center justify-between gap-3 px-4 py-3"
+                    <p v-if="perangkat?.galat" class="text-red-700">
+                        {{ perangkat.galat }}
+                    </p>
+                    <template v-else-if="perangkat && sudahMuatPerangkat">
+                        <p
+                            v-if="!perangkat.menunggu?.length"
+                            class="text-muted-foreground"
                         >
-                            <div>
-                                <p class="font-medium text-ink">{{ d.nama }}</p>
-                                <p
-                                    class="text-xs text-muted-foreground tabular-nums"
-                                >
-                                    {{
-                                        [d.ip, waktu(d.waktu)]
-                                            .filter(Boolean)
-                                            .join(' · ')
-                                    }}
-                                </p>
-                            </div>
-                            <Button
-                                v-if="d.id"
-                                size="sm"
-                                :disabled="memuatPerangkat"
-                                @click="setujui(d.id)"
-                                ><Check aria-hidden="true" />Setujui</Button
+                            Tidak ada permintaan yang menunggu.
+                        </p>
+                        <ul
+                            v-else
+                            class="divide-y divide-border rounded-md border border-border"
+                        >
+                            <li
+                                v-for="d in perangkat.menunggu"
+                                :key="d.id ?? d.nama"
+                                class="flex flex-wrap items-center justify-between gap-3 px-4 py-3"
                             >
-                        </li>
-                    </ul>
-                    <p
-                        v-if="perangkat.disetujui?.length"
-                        class="text-muted-foreground"
-                    >
-                        {{ perangkat.disetujui.length }} perangkat sudah
-                        disetujui.
-                    </p>
-                </template>
-            </div>
-        </section>
+                                <div>
+                                    <p class="font-medium text-ink">
+                                        {{ d.nama }}
+                                    </p>
+                                    <p
+                                        class="text-xs text-muted-foreground tabular-nums"
+                                    >
+                                        {{
+                                            [d.ip, waktu(d.waktu)]
+                                                .filter(Boolean)
+                                                .join(" · ")
+                                        }}
+                                    </p>
+                                </div>
+                                <Button
+                                    v-if="d.id"
+                                    size="sm"
+                                    :disabled="memuatPerangkat"
+                                    @click="setujui(d.id)"
+                                    ><Check aria-hidden="true" />Setujui</Button
+                                >
+                            </li>
+                        </ul>
+                        <p
+                            v-if="perangkat.disetujui?.length"
+                            class="text-muted-foreground"
+                        >
+                            {{ perangkat.disetujui.length }} perangkat sudah
+                            disetujui.
+                        </p>
+                    </template>
+                </div>
+            </section>
+        </template>
 
-        <section>
-            <h2 class="mb-3 text-lg font-semibold text-ink">Riwayat tagihan</h2>
+        <section v-if="tabAktif === 'tagihan'">
+            <h2 class="sr-only">Riwayat tagihan</h2>
             <DataTable
                 :kosong="!tagihan.length"
                 pesan-kosong="Belum ada tagihan."

@@ -170,7 +170,8 @@ sys.exit(main())
 PY
 chmod 755 /usr/local/bin/vc-relay-vps-sync
 
-echo '* * * * * root flock -n /run/vc-relay-vps.lock /usr/local/bin/vc-relay-vps-sync >> /var/log/vc-relay-vps.log 2>&1' > /etc/cron.d/vc-relay-vps
+echo 'PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin' > /etc/cron.d/vc-relay-vps  # cron tanpa /usr/sbin: nginx -t gagal FileNotFoundError (25 Nov, cfbeauty)
+echo '* * * * * root flock -n /run/vc-relay-vps.lock /usr/local/bin/vc-relay-vps-sync >> /var/log/vc-relay-vps.log 2>&1' >> /etc/cron.d/vc-relay-vps
 cat > /etc/logrotate.d/vc-relay-vps <<'EOF'
 /var/log/vc-relay-vps.log { weekly rotate 4 compress missingok notifempty }
 EOF

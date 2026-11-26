@@ -90,8 +90,31 @@ class AnalitikTest extends TestCase
         $hit(['e' => 'pv', 'vid' => 'pengunjungb', 'sid' => 'sesib00001', 'pid' => 'tampilanb2', 'p' => '/cloud-server/'], '09:05:00');
         $hit(['e' => 'ev', 'en' => 'klik_pesan', 'el' => 'vps-cloud-1', 'vid' => 'pengunjungb', 'sid' => 'sesib00001', 'p' => '/cloud-server/'], '09:06:00');
 
+        User::factory()->create(['created_at' => '2026-11-11 08:00:00']);
+        User::factory()->create(['created_at' => '2026-11-10 20:00:00']);
+        $admin = User::factory()->create(['created_at' => '2026-11-11 08:30:00', 'is_admin' => true]);
+        $member = User::query()->where('is_admin', false)->first();
+        $plan = \App\Models\Plan::create(['kategori' => \App\Enums\PlanKategori::Ai, 'slug' => 'ai-uji', 'nama' => 'Token Uji', 'harga' => 5000, 'aktif' => true, 'spek' => []]);
+        $service = \App\Models\Service::create(['user_id' => $member->id, 'plan_id' => $plan->id, 'label' => 'uji', 'status' => 'aktif', 'harga' => 0]);
+        $tagihan = fn (array $a, ?User $u = null) => DB::table('invoices')->insert($a + ['user_id' => ($u ?? $member)->id, 'service_id' => $service->id, 'nomor' => uniqid('INV-'),
+            'periode_mulai' => '2026-11-11', 'periode_selesai' => '2026-12-11', 'jatuh_tempo' => '2026-11-14', 'kode_unik' => 123, 'updated_at' => '2026-11-11 00:00:00']);
+        $tagihan(['jumlah' => 100000, 'status' => 'lunas', 'created_at' => '2026-11-11 08:00:00', 'dibayar_pada' => '2026-11-11 08:10:00']);
+        $tagihan(['jumlah' => 50000, 'status' => 'belum_dibayar', 'created_at' => '2026-11-11 09:00:00']);
+        $tagihan(['jumlah' => 30000, 'status' => 'dibatalkan', 'created_at' => '2026-11-10 09:00:00']);
+        $tagihan(['jumlah' => 999000, 'status' => 'lunas', 'created_at' => '2026-11-11 09:00:00', 'dibayar_pada' => '2026-11-11 09:01:00'], $admin);
+
+        $l = (new Laporan)->semua('7h');
+        $this->assertSame(1, $l['harian']['hari_ini']['akun_baru']);
+        $this->assertSame(1, $l['harian']['kemarin']['akun_baru']);
+        $this->assertSame(0, $l['harian']['kemarin']['pengguna']);
+        $this->assertSame(2, $l['ringkasan']['akun_baru']);
+        $this->assertSame(['pembelian' => 2, 'nilai_pembelian' => 150000, 'pembayaran' => 1, 'nilai_pembayaran' => 100000],
+            array_intersect_key($l['harian']['hari_ini'], array_flip(['pembelian', 'nilai_pembelian', 'pembayaran', 'nilai_pembayaran'])));
+        $this->assertSame([1, 30000], [$l['harian']['kemarin']['pembelian'], $l['harian']['kemarin']['nilai_pembelian']]);
+        $this->assertSame($l['harian']['hari_ini'], (new Laporan)->semua('hari_ini')['ringkasan']);
+
         $l = (new Laporan)->semua('hari_ini');
-        $this->assertSame(['pengguna' => 2, 'pengguna_baru' => 2, 'sesi' => 2, 'tampilan' => 3, 'tampilan_per_sesi' => 1.5, 'durasi_per_sesi' => 2, 'engaged_rate' => 0.5, 'bounce_rate' => 0.5, 'konversi' => 1], $l['ringkasan']);
+        $this->assertSame(['pengguna' => 2, 'pengguna_baru' => 2, 'sesi' => 2, 'tampilan' => 3, 'tampilan_per_sesi' => 1.5, 'durasi_per_sesi' => 2, 'engaged_rate' => 0.5, 'bounce_rate' => 0.5, 'konversi' => 1, 'akun_baru' => 1, 'pembelian' => 2, 'nilai_pembelian' => 150000, 'pembayaran' => 1, 'nilai_pembayaran' => 100000], $l['ringkasan']);
         $this->assertSame('/', $l['halaman'][0]['path']);
         $this->assertSame(2, $l['halaman_landing'][0]['sesi']);
         $this->assertEqualsCanonicalizing(['/', '/cloud-server/'], array_column($l['halaman_keluar'], 'path'));
@@ -101,6 +124,21 @@ class AnalitikTest extends TestCase
         $this->assertCount(24, $l['tren']);
         $this->assertSame(['label' => '09:00', 'pengguna' => 2, 'sesi' => 2, 'tampilan' => 3, 'baru' => 2, 'konversi' => 1], $l['tren'][9]);
         $this->assertNull($l['tren'][13]['pengguna']); // jam 13 belum terjadi (kini 12:00)
+    }
+
+    public function test_stream_sse_admin_saja_dan_dibatasi_slot(): void
+    {
+        $this->actingAs(User::factory()->create())->get(route('admin.analitik.stream'))->assertForbidden();
+        $sidik = \App\Http\Controllers\Admin\AnalitikController::sidik();
+        User::factory()->create();
+        $this->assertNotSame($sidik, \App\Http\Controllers\Admin\AnalitikController::sidik());
+
+        // semua slot terpakai → langsung ditutup dengan retry panjang, tidak menahan worker
+        \Illuminate\Support\Facades\Cache::lock('analitik-sse-0', 60)->get();
+        \Illuminate\Support\Facades\Cache::lock('analitik-sse-1', 60)->get();
+        $r = $this->actingAs(User::factory()->create(['is_admin' => true]))->get(route('admin.analitik.stream'));
+        $r->assertOk()->assertHeader('Content-Type', 'text/event-stream; charset=UTF-8');
+        $this->assertStringContainsString('retry: 30000', $r->streamedContent());
     }
 
     public function test_halaman_analitik_hanya_untuk_admin(): void

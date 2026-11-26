@@ -306,6 +306,47 @@ class CloudTest extends TestCase
         $this->assertSame(InvoiceStatus::Lunas, $invoice->fresh()->status);
     }
 
+    public function test_admin_layanan_filter_jenis(): void
+    {
+        $u = User::factory()->create();
+        $app = Service::create(['user_id' => $u->id, 'plan_id' => $this->plan()->id, 'label' => 'a', 'status' => ServiceStatus::Aktif, 'harga' => 1]);
+        $vps = Service::create(['user_id' => $u->id, 'plan_id' => $this->plan('vps-1', PlanKategori::Vps)->id, 'label' => 'v', 'status' => ServiceStatus::Ditangguhkan, 'harga' => 1]);
+        $admin = User::factory()->create();
+        $admin->forceFill(['is_admin' => true])->save();
+
+        $ids = fn (string $q) => collect($this->actingAs($admin)->get('/admin/layanan'.$q)->assertOk()->viewData('page')['props']['layanan'])->pluck('id')->sort()->values()->all();
+        $this->assertSame([$vps->id], $ids('?jenis=vps'));
+        $this->assertSame([], $ids('?jenis=app&status=ditangguhkan'));
+        $this->assertSame([$app->id, $vps->id], $ids('?jenis=ngawur'));
+    }
+
+    public function test_admin_tagihan_filter_jenis_produk(): void
+    {
+        Queue::fake();
+        $pemilik = User::factory()->create();
+        $app = app(\App\Actions\Order\BuatPesanan::class)->handle($pemilik, $this->plan(), 'n8n');
+        $app2 = Invoice::create(['user_id' => $pemilik->id, 'service_id' => $app->service_id, 'nomor' => 'INV-APP-2', 'jumlah' => 1, 'status' => InvoiceStatus::Lunas, 'periode_mulai' => now(), 'periode_selesai' => now()->addMonth(), 'jatuh_tempo' => now()]);
+        $vps = Service::create(['user_id' => $pemilik->id, 'plan_id' => $this->plan('vps-1', PlanKategori::Vps)->id, 'label' => 'v', 'status' => ServiceStatus::Aktif, 'harga' => 1]);
+        $tagihanVps = Invoice::create(['user_id' => $pemilik->id, 'service_id' => $vps->id, 'nomor' => 'INV-VPS-1', 'jumlah' => 1, 'status' => InvoiceStatus::BelumDibayar, 'periode_mulai' => now(), 'periode_selesai' => now()->addMonth(), 'jatuh_tempo' => now()]);
+        $admin = User::factory()->create();
+        $admin->forceFill(['is_admin' => true])->save();
+
+        $ids = fn (string $q) => collect($this->actingAs($admin)->get('/admin/tagihan'.$q)->assertOk()->viewData('page')['props']['tagihan'])->pluck('id')->sort()->values()->all();
+        $this->assertSame([$tagihanVps->id], $ids('?jenis=vps'));
+        $this->assertSame([$app->id], $ids('?jenis=app&status=belum_dibayar'));
+        $this->assertCount(3, $ids('?jenis=ngawur'));
+
+        // ringkasan: tanpa dibatalkan, ikut filter jenis; nominal = jumlah + kode unik
+        Invoice::create(['user_id' => $pemilik->id, 'service_id' => $vps->id, 'nomor' => 'INV-VPS-X', 'jumlah' => 999, 'status' => InvoiceStatus::Dibatalkan, 'periode_mulai' => now(), 'periode_selesai' => now()->addMonth(), 'jatuh_tempo' => now()]);
+        $app2->update(['dibayar_pada' => now()]);
+        $r = $this->actingAs($admin)->get('/admin/tagihan?jenis=app')->viewData('page')['props']['ringkasan'];
+        $this->assertSame(2, $r['tagihan']['jumlah']);
+        $this->assertSame($app->fresh()->total() + 1, $r['tagihan']['nominal']);
+        $this->assertSame(['nominal' => 1, 'jumlah' => 1], $r['dibayar_hari']);
+        $this->assertSame(['nominal' => 1, 'jumlah' => 1], $r['dibayar_bulan']);
+        $this->assertSame(1, $this->actingAs($admin)->get('/admin/tagihan?jenis=vps')->viewData('page')['props']['ringkasan']['tagihan']['jumlah']);
+    }
+
     public function test_pelanggan_melihat_status_dan_log_pod_miliknya(): void
     {
         Http::fake([

@@ -120,7 +120,7 @@ function hapus(p: Promo) {
                     <th>Berlaku</th>
                     <th>Status</th>
                     <th>Dipakai</th>
-                    <th>Token diberikan</th>
+                    <th>Total token diberikan</th>
                     <th>Omzet pemicu</th>
                     <th><span class="sr-only">Aksi</span></th>
                 </tr>
@@ -144,7 +144,10 @@ function hapus(p: Promo) {
                         {{ p.klaim_count }}×
                         <span class="block text-muted-foreground">{{ p.pelanggan }} pelanggan</span>
                     </td>
-                    <td>{{ p.token_total }} jt</td>
+                    <td>
+                        {{ p.token_total }} jt
+                        <span v-if="p.klaim_count" class="block text-muted-foreground">total dari {{ p.klaim_count }} klaim</span>
+                    </td>
                     <td>{{ rp(p.omzet) }}</td>
                     <td class="space-x-2 text-right whitespace-nowrap">
                         <Button size="sm" variant="outline" as-child>

@@ -3,6 +3,7 @@
 use App\Http\Controllers\Admin;
 use App\Http\Controllers\Auth\GoogleController;
 use App\Http\Controllers\ChatController;
+use App\Http\Controllers\NotifikasiController;
 use App\Http\Controllers\CheckoutController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\Internal\AgenDiskusiController;
@@ -31,6 +32,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('dashboard', Admin\DashboardController::class)->name('dashboard');
     Route::get('customer/dashboard', DashboardController::class)->name('customer.dashboard');
     Route::inertia('panduan', 'panduan/Index')->name('panduan');
+    Route::post('notifikasi/baca-semua', [NotifikasiController::class, 'bacaSemua'])->name('notifikasi.baca-semua');
+    Route::post('notifikasi/{id}/baca', [NotifikasiController::class, 'baca'])->whereUuid('id')->name('notifikasi.baca');
 
     Route::get('katalog/{kategori?}', [KatalogController::class, 'index'])->whereIn('kategori', array_keys(KatalogController::KATEGORI_URL))->name('katalog.index');
     Route::get('katalog/{plan:slug}', [KatalogController::class, 'show'])->name('katalog.show');
@@ -103,13 +106,18 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::put('checkout-klien/{klien}', [Admin\CheckoutKlienController::class, 'update'])->name('checkout-klien.update');
         Route::post('checkout-klien/{klien}/kunci', [Admin\CheckoutKlienController::class, 'kunci'])->name('checkout-klien.kunci');
         Route::post('checkout-webhook/{webhook}/ulang', [Admin\CheckoutKlienController::class, 'kirimUlang'])->name('checkout-webhook.ulang');
+        Route::get('notifikasi', [Admin\NotifikasiController::class, 'index'])->name('notifikasi.index');
+        Route::post('notifikasi', [Admin\NotifikasiController::class, 'store'])->middleware('throttle:10,1')->name('notifikasi.store');
+        Route::delete('notifikasi/{kiriman}', [Admin\NotifikasiController::class, 'destroy'])->whereUuid('kiriman')->name('notifikasi.destroy');
         Route::get('promo', [Admin\PromoController::class, 'index'])->name('promo.index');
         Route::post('promo', [Admin\PromoController::class, 'store'])->name('promo.store');
         Route::put('promo/{promo}', [Admin\PromoController::class, 'update'])->name('promo.update');
         Route::delete('promo/{promo}', [Admin\PromoController::class, 'destroy'])->name('promo.destroy');
         Route::get('analitik', [Admin\AnalitikController::class, 'index'])->name('analitik.index');
+        Route::get('analitik/stream', [Admin\AnalitikController::class, 'stream'])->name('analitik.stream');
         Route::get('seo', [Admin\SeoController::class, 'index'])->name('seo.index');
         Route::get('keyword-mapping', [Admin\SeoController::class, 'peta'])->name('seo.peta');
+        Route::get('keyword-planner', [Admin\SeoController::class, 'keyword'])->middleware('throttle:30,1')->name('seo.keyword');
         Route::post('keyword-mapping/negatif', [Admin\SeoController::class, 'negatif'])->name('seo.negatif');
         Route::get('agen', [Admin\AgenController::class, 'index'])->name('agen.index');
         Route::post('agen/arahan', [Admin\AgenController::class, 'simpanArahan'])->name('agen.arahan');

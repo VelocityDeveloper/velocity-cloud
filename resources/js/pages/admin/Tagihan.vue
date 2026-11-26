@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Form, Head } from '@inertiajs/vue3';
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import TagihanController from '@/actions/App/Http/Controllers/Admin/TagihanController';
 import DataTable from '@/components/cloud/DataTable.vue';
 import FilterStatus from '@/components/cloud/FilterStatus.vue';
@@ -29,11 +29,50 @@ defineOptions({
         ],
     },
 });
-defineProps<{
+type Angka = { nominal: number; jumlah: number };
+const props = defineProps<{
+    ringkasan: Record<
+        | 'tagihan'
+        | 'belum_dibayar'
+        | 'dibayar'
+        | 'dibayar_bulan'
+        | 'tagihan_bulan'
+        | 'dibayar_hari'
+        | 'tagihan_hari',
+        Angka
+    >;
     status: string;
+    jenis: string;
+    pilihanJenis: { value: string; label: string }[];
     tagihan: (Tagihan & { pelanggan: string; email: string })[];
 }>();
 
+// Kartu ringkasan: angka besar = nominal, baris kecil = keterangan.
+const kartu = computed(() => {
+    const r = props.ringkasan;
+    return [
+        {
+            judul: 'Total tagihan',
+            nilai: r.tagihan.nominal,
+            ket: `${r.tagihan.jumlah} tagihan · ${rupiah(r.belum_dibayar.nominal)} belum dibayar`,
+        },
+        {
+            judul: 'Total dibayar',
+            nilai: r.dibayar.nominal,
+            ket: `${r.dibayar.jumlah} tagihan lunas`,
+        },
+        {
+            judul: 'Dibayar bulan ini',
+            nilai: r.dibayar_bulan.nominal,
+            ket: `${r.dibayar_bulan.jumlah} lunas · tagihan baru ${rupiah(r.tagihan_bulan.nominal)}`,
+        },
+        {
+            judul: 'Dibayar hari ini',
+            nilai: r.dibayar_hari.nominal,
+            ket: `${r.dibayar_hari.jumlah} lunas · tagihan baru ${rupiah(r.tagihan_hari.nominal)}`,
+        },
+    ];
+});
 const dipilih = ref<(Tagihan & { pelanggan: string }) | null>(null);
 const pilihanStatus = [
     { value: 'belum_dibayar', label: 'Belum dibayar' },
@@ -49,11 +88,36 @@ const pilihanStatus = [
             title="Tagihan"
             description="Tandai lunas setelah pembayaran dikonfirmasi. Layanan app langsung diprovisioning."
         >
-            <FilterStatus :nilai="status" :pilihan="pilihanStatus" />
+            <div class="flex flex-wrap items-center gap-3">
+                <FilterStatus
+                    :nilai="jenis"
+                    :pilihan="pilihanJenis"
+                    param="jenis"
+                    judul="Jenis produk"
+                />
+                <FilterStatus :nilai="status" :pilihan="pilihanStatus" />
+            </div>
         </PageHeader>
+        <div class="grid grid-cols-2 gap-3 xl:grid-cols-4">
+            <div
+                v-for="k in kartu"
+                :key="k.judul"
+                class="rounded-lg border border-border bg-white p-4"
+            >
+                <p class="text-xs text-muted-foreground">{{ k.judul }}</p>
+                <p
+                    class="mt-1 font-heading text-xl font-bold text-ink tabular-nums md:text-2xl"
+                >
+                    {{ rupiah(k.nilai) }}
+                </p>
+                <p class="mt-1 text-xs text-muted-foreground tabular-nums">
+                    {{ k.ket }}
+                </p>
+            </div>
+        </div>
         <DataTable
             :kosong="!tagihan.length"
-            pesan-kosong="Tidak ada tagihan dengan status ini."
+            pesan-kosong="Tidak ada tagihan dengan filter ini."
         >
             <thead>
                 <tr>
@@ -61,6 +125,7 @@ const pilihanStatus = [
                     <th>Pelanggan</th>
                     <th>Layanan</th>
                     <th>Jatuh tempo</th>
+                    <th>Tanggal dibayar</th>
                     <th>Status</th>
                     <th class="text-right">Jumlah</th>
                     <th><span class="sr-only">Aksi</span></th>
@@ -77,6 +142,16 @@ const pilihanStatus = [
                     </td>
                     <td>{{ t.layanan }}</td>
                     <td>{{ tanggal(t.jatuh_tempo) }}</td>
+                    <td>
+                        <template v-if="t.dibayar_pada"
+                            >{{ tanggal(t.dibayar_pada.slice(0, 10)) }}
+                            <span class="block text-xs text-muted-foreground"
+                                >{{ t.dibayar_pada.slice(11, 16) }} ·
+                                {{ t.metode }}</span
+                            ></template
+                        >
+                        <template v-else>-</template>
+                    </td>
                     <td>
                         <StatusBadge
                             :status="t.status"

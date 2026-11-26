@@ -49,8 +49,11 @@ class Laporan
         [$dari, $sampai, $perJam] = self::rentang($periode);
         $panjang = $dari->diffInSeconds($sampai);
         [$dariLalu, $sampaiLalu] = [$dari->subSeconds($panjang), $dari];
+        [$hariIni, $besok] = self::rentang('hari_ini');
 
         return [
+            // card tetap Hari ini & Kemarin, tidak ikut periode yang dipilih
+            'harian' => ['hari_ini' => $this->ringkasan($hariIni, $besok), 'kemarin' => $this->ringkasan($hariIni->subDay(), $hariIni)],
             'ringkasan' => $this->ringkasan($dari, $sampai),
             'ringkasan_lalu' => $this->ringkasan($dariLalu, $sampaiLalu),
             'tren' => $this->tren($dari, $sampai, $perJam),
@@ -104,7 +107,22 @@ class Laporan
             'engaged_rate' => $sesi ? round($s->engaged / $sesi, 4) : 0,
             'bounce_rate' => $sesi ? round(1 - $s->engaged / $sesi, 4) : 0,
             'konversi' => $konversi,
+            // akun member yang mendaftar di app (bukan visitor), admin tidak dihitung
+            'akun_baru' => DB::table('users')->where('is_admin', false)
+                ->where('created_at', '>=', $dari->toDateTimeString())->where('created_at', '<', $sampai->toDateTimeString())->count(),
+            ...$this->transaksi($dari, $sampai),
         ];
+    }
+
+    /** Pembelian = tagihan dibuat (semua status); pembayaran = tagihan lunas menurut dibayar_pada. Nilai = jumlah tanpa kode unik; tagihan akun admin tidak dihitung. */
+    private function transaksi(CarbonImmutable $dari, CarbonImmutable $sampai): array
+    {
+        $q = fn (string $kolom) => DB::table('invoices')->join('users', 'users.id', '=', 'invoices.user_id')->where('users.is_admin', false)
+            ->where("invoices.$kolom", '>=', $dari->toDateTimeString())->where("invoices.$kolom", '<', $sampai->toDateTimeString());
+        $beli = $q('created_at')->selectRaw('COUNT(*) AS n, COALESCE(SUM(invoices.jumlah), 0) AS nilai')->first();
+        $bayar = $q('dibayar_pada')->where('invoices.status', 'lunas')->selectRaw('COUNT(*) AS n, COALESCE(SUM(invoices.jumlah), 0) AS nilai')->first();
+
+        return ['pembelian' => (int) $beli->n, 'nilai_pembelian' => (int) $beli->nilai, 'pembayaran' => (int) $bayar->n, 'nilai_pembayaran' => (int) $bayar->nilai];
     }
 
     public function tren(CarbonImmutable $dari, CarbonImmutable $sampai, bool $perJam): array

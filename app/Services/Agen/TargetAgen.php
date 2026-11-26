@@ -103,6 +103,7 @@ class TargetAgen
     /**
      * Corong situs → dashboard dalam rentang [dari, sampai) zona aplikasi (WIB).
      * sesi_asli = sesi non-internal yang berasal dari mesin pencari (organic) ATAU negara Indonesia (ID).
+     * omzet_lunas = hanya member organik (sumber pertama Langsung atau google / organic); tanpa sumber = akun internal tim.
      */
     public static function corong(CarbonImmutable $dari, CarbonImmutable $sampai): array
     {
@@ -134,8 +135,24 @@ class TargetAgen
             'pesanan' => Service::where('created_at', '>=', $dari)->where('created_at', '<', $sampai)
                 ->whereHas('user', fn ($q) => $q->where('is_admin', false))->count(),
             'lunas' => (clone $lunasQuery)->count(),
-            'omzet_lunas' => (int) (clone $lunasQuery)->sum('jumlah'),
+            'omzet_lunas' => self::omzetOrganik($lunasQuery),
         ];
+    }
+
+    /** Jumlah tagihan lunas milik member yang tampilan halaman pertamanya (first touch, sama dengan /admin/pengguna) Langsung atau google / organic. */
+    private static function omzetOrganik($lunasQuery): int
+    {
+        $lunas = (clone $lunasQuery)->with('service.user:id,analitik_vid')->get(['id', 'service_id', 'jumlah']);
+        $pertama = DB::table('analitik_hits')->where('jenis', 'pv')
+            ->whereIn('vid', $lunas->pluck('service.user.analitik_vid')->filter()->unique()->values())
+            ->orderBy('waktu')->get(['vid', 'sumber', 'medium'])
+            ->unique('vid')->keyBy('vid');
+
+        return (int) $lunas->filter(function (Invoice $i) use ($pertama) {
+            $h = $pertama[$i->service?->user?->analitik_vid] ?? null;
+
+            return $h && ($h->sumber === '(direct)' || ($h->sumber === 'google' && $h->medium === 'organic'));
+        })->sum('jumlah');
     }
 
     /** Corong N hari mundur dari awal hari ini (sama dengan pola MulaiSiklus lama, kini lengkap sesi_asli & klik_daftar). */

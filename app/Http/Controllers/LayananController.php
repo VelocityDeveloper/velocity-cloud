@@ -25,7 +25,8 @@ class LayananController extends Controller
     public function index(Request $request): Response
     {
         return Inertia::render('layanan/Index', [
-            'layanan' => $request->user()->services()->with('plan')->latest()->get()->map(Tampil::layanan(...)),
+            // Aktif di atas, sisanya terbaru dulu.
+            'layanan' => $request->user()->services()->with('plan')->orderByRaw('status = ? desc', [ServiceStatus::Aktif->value])->latest()->get()->map(Tampil::layanan(...)),
         ]);
     }
 

@@ -50,6 +50,17 @@ return [
     // Token bersama dengan server bot (/etc/velocity/secrets/agen-diskusi.token) untuk POST /internal/agen/diskusi.
     'agen_diskusi_token' => env('AGEN_DISKUSI_TOKEN', ''),
 
+    // Admin › SEO › Keyword Planner: Google Ads generateKeywordIdeas lewat OAuth (developer token level Basic; kunci akun layanan = explorer, ditolak).
+    'keyword_planner' => [
+        'client_id' => env('KP_CLIENT_ID'),
+        'client_secret' => env('KP_CLIENT_SECRET'),
+        'refresh_token' => env('KP_REFRESH_TOKEN'),
+        'developer_token' => env('KP_DEVELOPER_TOKEN'),
+        'customer_id' => env('KP_CUSTOMER_ID'),
+        'login_customer_id' => env('KP_LOGIN_CUSTOMER_ID'),
+        'api' => env('KP_API', 'https://googleads.googleapis.com/v26'),
+    ],
+
     'gsc' => [
         'kredensial' => env('GSC_KREDENSIAL', '/etc/velocity/secrets/gsc-velocitydeveloper-co.json'),
         'situs' => env('GSC_SITUS', 'sc-domain:velocitydatacenter.com'),
@@ -81,7 +92,7 @@ return [
         'pool' => 'default',
         'client_cert' => env('VPS_INCUS_CERT', '/etc/velocity/secrets/incus-client.crt'),
         'client_key' => env('VPS_INCUS_KEY', '/etc/velocity/secrets/incus-client.key'),
-        'paket' => ['vps-cloud-1', 'vps-cloud-2', 'vps-cloud-3', 'vps-cloud-4-80-gb'], // dibuat otomatis; paket lain tetap manual (pemasok)
+        'paket' => ['vps-cloud-1', 'vps-cloud-2', 'vps-cloud-3', 'vps-cloud-4-80-gb', 'vps-cloud-6-240-gb'], // dibuat otomatis; paket lain tetap manual (pemasok)
         'image_server' => 'https://images.linuxcontainers.org',
         // Urutan & penamaan mengikuti Sumopod (25 Nov). OpenCloudOS, CentOS 7, Debian 10/11 tidak ada image VM di images.linuxcontainers.org.
         'os' => [
@@ -94,6 +105,7 @@ return [
             'debian-13' => ['nama' => 'Debian 13 64bit', 'alias' => 'debian/13/cloud'],
             // aaPanel dipasang cloud-init (±5-10 mnt sesudah aktif; uji matsuba 2 mnt) di port tambahan pertama VM; login velocity + sandi root (aaPanel menolak admin/root).
             'aapanel-debian-12' => ['nama' => 'aaPanel (Debian 12)', 'alias' => 'debian/12/cloud', 'aapanel' => true],
+            'aapanel-ubuntu-24.04' => ['nama' => 'aaPanel (Ubuntu 24.04)', 'alias' => 'ubuntu/24.04/cloud', 'aapanel' => true], // khusus admin (25 Nov, pindahan cfbeauty), tidak di vps.os_aktif
         ],
     ],
 

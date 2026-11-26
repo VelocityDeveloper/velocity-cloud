@@ -23,10 +23,10 @@ class AnalitikTokenTest extends TestCase
         $t = $service->tokenAi()->create(['kunci_hash' => str_repeat('a', 64), 'saldo' => 900, 'terpakai' => 100]);
         $w = now()->toDateTimeString();
         DB::table('token_ai_pemakaian')->insert([
-            ['token_ai_id' => $t->id, 'model' => 'm1', 'prompt' => 80, 'cache_hit' => 40, 'completion' => 20, 'total' => 100, 'durasi_ms' => 1000, 'taksiran' => 0, 'status' => 200, 'created_at' => $w],
-            ['token_ai_id' => $t->id, 'model' => 'm1', 'prompt' => 0, 'cache_hit' => 0, 'completion' => 0, 'total' => 0, 'durasi_ms' => 5, 'taksiran' => 0, 'status' => 402, 'created_at' => $w],
+            ['token_ai_id' => $t->id, 'model' => 'm1', 'prompt' => 80, 'cache_hit' => 40, 'completion' => 20, 'total' => 100, 'potong' => 200000, 'durasi_ms' => 1000, 'taksiran' => 0, 'status' => 200, 'created_at' => $w],
+            ['token_ai_id' => $t->id, 'model' => 'm1', 'prompt' => 0, 'cache_hit' => 0, 'completion' => 0, 'total' => 0, 'potong' => null, 'durasi_ms' => 5, 'taksiran' => 0, 'status' => 402, 'created_at' => $w],
             // periode lalu (40 hari lalu) tidak ikut ringkasan 30 hari
-            ['token_ai_id' => $t->id, 'model' => 'm1', 'prompt' => 10, 'cache_hit' => 0, 'completion' => 10, 'total' => 20, 'durasi_ms' => 1, 'taksiran' => 1, 'status' => 200, 'created_at' => now()->subDays(40)->toDateTimeString()],
+            ['token_ai_id' => $t->id, 'model' => 'm1', 'prompt' => 10, 'cache_hit' => 0, 'completion' => 10, 'total' => 20, 'potong' => null, 'durasi_ms' => 1, 'taksiran' => 1, 'status' => 200, 'created_at' => now()->subDays(40)->toDateTimeString()],
         ]);
 
         $this->actingAs(User::factory()->create(['is_admin' => true]))->get(route('admin.paket.index', 'ai'))->assertOk()
@@ -38,6 +38,11 @@ class AnalitikTokenTest extends TestCase
                 ->where('analitik.ringkasan_lalu.token', 20)
                 ->where('analitik.pelanggan.0.nama', 'Budi · chatbot')
                 ->where('analitik.pelanggan.0.kuota_terpakai', 0.1)
+                // nilai = potong × harga output paket / 1 jt: 200.000 × 5.000 / 1 jt
+                ->where('analitik.ringkasan.nilai', 1000)
+                ->where('analitik.pelanggan.0.nilai', 1000)
+                ->where('analitik.pelanggan.0.user_id', $user->id)
+                ->where('analitik.model.0.nilai', 1000)
                 ->where('analitik.gagal.0.nama', '402 · Saldo habis')
                 ->has('analitik.tren', 30));
 

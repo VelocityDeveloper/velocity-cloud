@@ -20,6 +20,6 @@ Schedule::command('tagihan:proses')->dailyAt('07:00');
 Schedule::command('domain:landing')->dailyAt('06:30'); // harga domain CRM ikut kurs
 Schedule::command('metrik:ambil')->everyMinute()->withoutOverlapping();
 Schedule::command('tiket:ambil-email')->everyMinute()->withoutOverlapping();
-Schedule::command('analitik:impor')->everyMinute()->withoutOverlapping();
+Schedule::command('analitik:impor')->everyTenSeconds()->withoutOverlapping(); // 10 dtk agar SSE /admin/analitik terasa realtime
 // Pengingat jatuh tempo email (25 Nov): hanya berjalan setelah PENGINGAT_EMAIL_AKTIF=true; pemberitahuan dashboard tidak butuh jadwal
 Schedule::command('pengingat:email')->dailyAt(config('pengingat.email.jam'))->when(fn () => config('pengingat.email.aktif'));

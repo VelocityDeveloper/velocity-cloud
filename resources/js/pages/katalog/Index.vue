@@ -2,6 +2,9 @@
 import { Head, Link } from "@inertiajs/vue3";
 import {
     AppWindow,
+    ArrowDown,
+    ArrowUp,
+    ArrowUpDown,
     Bot,
     Cpu,
     FileText,
@@ -13,7 +16,7 @@ import {
     ShoppingCart,
     Wallet,
 } from "@lucide/vue";
-import { computed } from "vue";
+import { computed, ref } from "vue";
 import DataTable from "@/components/cloud/DataTable.vue";
 import PageHeader from "@/components/cloud/PageHeader.vue";
 import PromoBanner from "@/components/cloud/PromoBanner.vue";
@@ -39,9 +42,27 @@ const info: Record<Paket["kategori"], { judul: string; sub: string }> = {
     domain: { judul: "Domain", sub: "Harga sekali bayar per periode registrasi." }, // tak punya tab katalog, dipesan di /domain
     ai: { judul: "Token AI", sub: "Harga per 1 juta token. Saldo dibeli seharga output dan tanpa masa berlaku; token input & cache memotong saldo lebih sedikit sesuai harganya." },
 };
-const daftar = computed(() =>
-    props.paket.filter((p) => p.kategori === tab.value),
-);
+// Token AI bisa diurut per harga (klik judul kolom): pertama termurah, klik lagi termahal.
+type KolomHarga = "input" | "cache" | "output";
+const urut = ref<{ kolom: KolomHarga; turun: boolean } | null>(null);
+const urutkan = (kolom: KolomHarga) =>
+    (urut.value = urut.value?.kolom === kolom ? { kolom, turun: !urut.value.turun } : { kolom, turun: false });
+// harga_input/harga_cache kosong = seharga output (paket lama)
+const hargaAi = (p: Paket, kolom: KolomHarga) =>
+    kolom === "output"
+        ? Number(p.harga_promo ?? p.harga)
+        : kolom === "input"
+          ? Number(p.spek?.harga_input ?? p.harga)
+          : Number(p.spek?.harga_cache ?? p.spek?.harga_input ?? p.harga);
+// ikon ⇅ = kolom bisa diurut; panah ↑/↓ = kolom yang sedang dipakai mengurutkan
+const ikonUrut = (k: KolomHarga) => (urut.value?.kolom === k ? (urut.value.turun ? ArrowDown : ArrowUp) : ArrowUpDown);
+const ariaUrut = (k: KolomHarga) => (urut.value?.kolom === k ? (urut.value.turun ? "descending" : "ascending") : "none");
+const daftar = computed(() => {
+    const isi = props.paket.filter((p) => p.kategori === tab.value);
+    const u = urut.value;
+    if (tab.value !== "ai" || !u) return isi;
+    return isi.sort((a, b) => (hargaAi(a, u.kolom) - hargaAi(b, u.kolom)) * (u.turun ? -1 : 1));
+});
 </script>
 
 <template>
@@ -134,14 +155,18 @@ const daftar = computed(() =>
                             />Keterangan</span
                         >
                     </th>
-                    <th class="text-right">Input</th>
-                    <th class="text-right">Cache</th>
-                    <th class="text-right">
-                        <span class="inline-flex items-center gap-1.5"
+                    <th class="text-right" :aria-sort="ariaUrut('input')">
+                        <button type="button" class="inline-flex items-center gap-1 font-semibold hover:text-brand-700" title="Urutkan menurut harga input" @click="urutkan('input')">Input<component :is="ikonUrut('input')" class="size-3.5" :class="urut?.kolom === 'input' ? 'text-brand-700' : 'text-muted-foreground'" aria-hidden="true" /></button>
+                    </th>
+                    <th class="text-right" :aria-sort="ariaUrut('cache')">
+                        <button type="button" class="inline-flex items-center gap-1 font-semibold hover:text-brand-700" title="Urutkan menurut harga cache" @click="urutkan('cache')">Cache<component :is="ikonUrut('cache')" class="size-3.5" :class="urut?.kolom === 'cache' ? 'text-brand-700' : 'text-muted-foreground'" aria-hidden="true" /></button>
+                    </th>
+                    <th class="text-right" :aria-sort="ariaUrut('output')">
+                        <button type="button" class="inline-flex items-center gap-1.5 font-semibold hover:text-brand-700" title="Urutkan menurut harga output" @click="urutkan('output')"
                             ><Wallet
                                 class="size-4 text-brand-700"
                                 aria-hidden="true"
-                            />Output</span
+                            />Output<component :is="ikonUrut('output')" class="-ml-0.5 size-3.5" :class="urut?.kolom === 'output' ? 'text-brand-700' : 'text-muted-foreground'" aria-hidden="true" /></button
                         >
                     </th>
                     <th><span class="sr-only">Aksi</span></th>
@@ -152,6 +177,10 @@ const daftar = computed(() =>
                     <td class="font-semibold text-ink">
                         {{ p.nama
                         }}<span
+                            v-if="p.spek?.populer"
+                            class="ml-2 inline-block rounded-full bg-brand-50 px-2 py-0.5 align-middle text-[11px] font-semibold text-brand-700"
+                            >Populer</span
+                        ><span
                             class="block font-mono text-xs font-normal text-muted-foreground"
                             >{{ p.spek?.model }}</span
                         >
@@ -161,12 +190,11 @@ const daftar = computed(() =>
                     >
                         {{ p.ringkas }}
                     </td>
-                    <!-- harga_input/harga_cache kosong = seharga output (paket lama) -->
                     <td class="text-right text-muted-foreground tabular-nums">
-                        {{ rupiah(Number(p.spek?.harga_input ?? p.harga)) }}
+                        {{ rupiah(hargaAi(p, "input")) }}
                     </td>
                     <td class="text-right text-muted-foreground tabular-nums">
-                        {{ rupiah(Number(p.spek?.harga_cache ?? p.spek?.harga_input ?? p.harga)) }}
+                        {{ rupiah(hargaAi(p, "cache")) }}
                     </td>
                     <td class="text-right font-semibold text-ink tabular-nums">
                         <s v-if="p.harga_promo != null" class="block text-xs font-normal text-muted-foreground">{{ rupiah(p.harga) }}</s>

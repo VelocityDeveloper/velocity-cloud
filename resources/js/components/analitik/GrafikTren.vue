@@ -15,6 +15,8 @@ const props = defineProps<{
 const wadah = ref<HTMLElement | null>(null);
 const { width } = useElementSize(wadah);
 const T = 240;
+// Label sumbu Y ringkas (20 rb, 1,5 jt) agar angka besar tidak terpotong di kiri.
+const ringkas = (n: number) => n.toLocaleString('id-ID', { notation: 'compact', maximumFractionDigits: 1 });
 const pad = { kiri: 40, kanan: 12, atas: 12, bawah: 28 };
 const lebar = computed(() => Math.max(width.value, 280));
 // 4 garis bantu dengan langkah "bulat" (1, 2, 5 × 10^n)
@@ -59,7 +61,7 @@ function gerak(e: PointerEvent) {
             <g class="text-[10px] fill-muted-foreground">
                 <template v-for="g in gridY" :key="g">
                     <line :x1="pad.kiri" :x2="lebar - pad.kanan" :y1="y(g)" :y2="y(g)" class="stroke-border" stroke-width="1" />
-                    <text :x="pad.kiri - 6" :y="y(g) + 3" text-anchor="end">{{ angka(g) }}</text>
+                    <text :x="pad.kiri - 6" :y="y(g) + 3" text-anchor="end">{{ ringkas(g) }}</text>
                 </template>
                 <template v-for="(l, i) in label" :key="l">
                     <text v-if="i % tiapLabel === 0" :x="x(i)" :y="T - 8" text-anchor="middle">{{ l.length === 10 ? l.slice(8) + '/' + l.slice(5, 7) : l }}</text>

@@ -62,13 +62,13 @@ const adaSpek = computed(() =>
 );
 const isApp = computed(() => props.kategori.value === 'app');
 const isAi = computed(() => props.kategori.value === 'ai');
-// Paket AI: tab "Model" (daftar paket) & "Laporan" (pemakaian token); ?tab=laporan agar bisa dibagikan/di-refresh
-const TAB_AI = { model: 'List model', laporan: 'Laporan' } as const;
-const tab = ref<keyof typeof TAB_AI>(new URLSearchParams(window.location.search).get('tab') === 'laporan' ? 'laporan' : 'model');
+// Paket AI: tab "Laporan" (pemakaian token, default) & "Model" (daftar paket); ?tab=model agar bisa dibagikan/di-refresh
+const TAB_AI = { laporan: 'Laporan', model: 'List model' } as const;
+const tab = ref<keyof typeof TAB_AI>(new URLSearchParams(window.location.search).get('tab') === 'model' ? 'model' : 'laporan');
 function pilihTab(k: keyof typeof TAB_AI) {
     tab.value = k;
     const url = new URL(window.location.href);
-    if (k === 'model') url.searchParams.delete('tab');
+    if (k === 'laporan') url.searchParams.delete('tab');
     else url.searchParams.set('tab', k);
     window.history.replaceState(window.history.state, '', url);
 }
@@ -485,7 +485,10 @@ function simpan() {
                 </tr>
             </tbody>
         </DataTable>
-        <p class="text-xs text-muted-foreground">
+        <p
+            v-if="!isAi || tab === 'model'"
+            class="text-xs text-muted-foreground"
+        >
             Terpakai = layanan menunggu pembayaran, disiapkan, aktif, atau
             ditangguhkan. Layanan gagal/dibatalkan mengembalikan stok.
         </p>

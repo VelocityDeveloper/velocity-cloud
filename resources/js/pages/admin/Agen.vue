@@ -98,7 +98,7 @@ const LABEL_METRIK: Record<string, { judul: string; rupiah?: boolean }> = {
     klik_pesan: { judul: 'Klik Pesan' },
     klik_daftar: { judul: 'Klik Daftar' },
     order_lunas: { judul: 'Order lunas' },
-    omzet_lunas: { judul: 'Omzet lunas', rupiah: true },
+    omzet_lunas: { judul: 'Omzet lunas organik (Langsung & google)', rupiah: true },
 };
 const itemProgresAktif = computed(() => {
     const sumber = modeTarget.value === 'mingguan' ? props.progres.mingguan.item : props.progres.bulanan.item;

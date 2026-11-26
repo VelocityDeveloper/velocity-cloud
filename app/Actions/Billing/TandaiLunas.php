@@ -17,6 +17,7 @@ use App\Models\PromoKlaim;
 use App\Models\SaldoMutasi;
 use App\Models\User;
 use App\Models\Service;
+use App\Notifications\Pemberitahuan;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\DB;
@@ -146,6 +147,12 @@ class TandaiLunas
                 'token_juta' => $p->bonus_token_juta,
                 'nominal' => $invoice->jumlah,
             ]);
+            $invoice->user->notify(new Pemberitahuan(
+                'bonus',
+                'Bonus '.number_format($p->bonus_token_juta * 1_000_000, 0, ',', '.').' token '.$tujuan->plan->nama,
+                'Dari promo '.$p->nama.' atas tagihan '.$invoice->nomor.'. Saldo sudah masuk ke layanan '.$tujuan->label.'.',
+                '/layanan/'.$tujuan->id,
+            ));
         }
     }
 

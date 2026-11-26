@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Enums\PlanKategori;
 use App\Enums\ServiceStatus;
 use App\Http\Controllers\Controller;
 use App\Http\Presenters\Tampil;
@@ -19,12 +20,16 @@ class LayananController extends Controller
     public function index(Request $request): Response
     {
         $status = $request->query('status', 'semua');
+        $jenis = $request->query('jenis', 'semua');
 
         return Inertia::render('admin/Layanan', [
             'status' => $status,
+            'jenis' => $jenis,
+            'daftar_jenis' => array_map(fn (PlanKategori $k) => ['value' => $k->value, 'label' => $k->label()], PlanKategori::cases()),
             'daftar_status' => collect(ServiceStatus::cases())->map(fn ($s) => ['value' => $s->value, 'label' => $s->label()]),
             'layanan' => Service::with('plan', 'user', 'node')
                 ->when($status !== 'semua', fn ($q) => $q->where('status', $status))
+                ->when(PlanKategori::tryFrom($jenis), fn ($q, PlanKategori $k) => $q->whereHas('plan', fn ($p) => $p->where('kategori', $k)))
                 ->latest()->limit(200)->get()
                 ->map(fn (Service $s) => [
                     ...Tampil::layanan($s),

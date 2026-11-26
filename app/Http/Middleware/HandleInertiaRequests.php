@@ -47,6 +47,12 @@ class HandleInertiaRequests extends Middleware
             // badge menu admin Tiket: jumlah tiket menunggu balasan tim
             'tiketTerbuka' => fn () => $request->user()?->is_admin ? Tiket::where('status', 'terbuka')->count() : 0,
             // pengingat pelanggan: jatuh tempo H-7, tagihan tertunda, saldo token menipis (hanya baca)
+            // lonceng header: 10 terbaru + jumlah belum dibaca
+            'notifikasi' => fn () => $request->user() ? [
+                'belum' => $request->user()->unreadNotifications()->count(),
+                'daftar' => $request->user()->notifications()->latest()->limit(10)->get()
+                    ->map(fn ($n) => ['id' => $n->id, ...$n->data, 'dibaca' => $n->read_at !== null, 'waktu' => $n->created_at->toIso8601String()]),
+            ] : null,
             'pengingat' => fn () => $request->user() ? app(DaftarPengingat::class)->untuk($request->user()) : [],
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
         ];

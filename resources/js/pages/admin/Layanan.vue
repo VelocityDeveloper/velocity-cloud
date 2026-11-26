@@ -40,6 +40,8 @@ defineOptions({
 defineProps<{
     status: string;
     daftar_status: { value: string; label: string }[];
+    jenis: string;
+    daftar_jenis: { value: string; label: string }[];
     layanan: Baris[];
 }>();
 
@@ -53,11 +55,19 @@ const dipilih = ref<Baris | null>(null);
             title="Layanan"
             description="Cloud Server dan Managed Server disiapkan manual: isi info akses lalu ubah status ke Aktif. Akun Shared Hosting dibuat otomatis; bila gagal, klik Ulangi."
         >
-            <FilterStatus :nilai="status" :pilihan="daftar_status" />
+            <div class="flex flex-wrap items-center gap-3">
+                <FilterStatus
+                    :nilai="jenis"
+                    :pilihan="daftar_jenis"
+                    param="jenis"
+                    judul="Jenis"
+                />
+                <FilterStatus :nilai="status" :pilihan="daftar_status" />
+            </div>
         </PageHeader>
         <DataTable
             :kosong="!layanan.length"
-            pesan-kosong="Tidak ada layanan dengan status ini."
+            pesan-kosong="Tidak ada layanan dengan filter ini."
         >
             <thead>
                 <tr>

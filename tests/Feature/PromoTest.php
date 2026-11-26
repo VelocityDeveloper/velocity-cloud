@@ -80,6 +80,9 @@ class PromoTest extends TestCase
         $this->assertArrayHasKey('kredensial', $token->detail);
         $k = PromoKlaim::sole();
         $this->assertSame([$p->id, $u->id, $token->id, 20, 114000], [$k->promo_id, $k->user_id, $k->token_service_id, $k->token_juta, $k->nominal]);
+        $n = $u->unreadNotifications()->sole();
+        $this->assertSame(['bonus', '/layanan/'.$token->id], [$n->data['jenis'], $n->data['url']]);
+        $this->assertStringContainsString('20.000.000 token', $n->data['judul']);
 
         // pembelian baru kedua masuk ke layanan token yang sama, tidak membuat layanan baru
         $app = $this->tagihan($u, PlanKategori::App, 110000);
@@ -119,6 +122,7 @@ class PromoTest extends TestCase
 
         $this->assertSame(0, PromoKlaim::count());
         $this->assertSame(0, $this->saldoToken($u));
+        $this->assertSame(0, $u->notifications()->count());
     }
 
     public function test_admin_atur_promo_dan_lihat_pemakaian(): void

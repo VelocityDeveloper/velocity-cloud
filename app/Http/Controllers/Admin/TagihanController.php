@@ -19,30 +19,39 @@ use Inertia\Response;
 
 class TagihanController extends Controller
 {
+    /** Metode pembayaran tagihan lunas: midtrans dari gateway, sisanya dari Tandai lunas admin. */
+    private const METODE = ['midtrans' => 'Midtrans', 'transfer' => 'Transfer bank', 'qris' => 'QRIS', 'tunai' => 'Tunai', 'lainnya' => 'Lainnya'];
+
     public function index(Request $request): Response
     {
         $status = $request->query('status', 'semua');
         $jenis = $request->query('jenis', 'semua');
+        $metode = $request->query('metode', 'semua');
         $kategori = PlanKategori::tryFrom($jenis);
+        // Filter jenis + metode, dipakai daftar dan kartu ringkasan.
+        $saring = fn ($q) => $q
+            ->when($kategori, fn ($q, PlanKategori $k) => $q->whereHas('service.plan', fn ($p) => $p->where('kategori', $k)))
+            ->when(isset(self::METODE[$metode]), fn ($q) => $q->where('metode', $metode));
 
         return Inertia::render('admin/Tagihan', [
-            'ringkasan' => $this->ringkasan($kategori),
+            'ringkasan' => $this->ringkasan($saring),
             'status' => $status,
             'jenis' => $jenis,
+            'metode' => $metode,
             'pilihanJenis' => array_map(fn (PlanKategori $k) => ['value' => $k->value, 'label' => $k->label()], PlanKategori::cases()),
-            'tagihan' => Invoice::with('service.plan', 'user')
+            'pilihanMetode' => array_map(fn ($v, $l) => ['value' => $v, 'label' => $l], array_keys(self::METODE), self::METODE),
+            'tagihan' => $saring(Invoice::with('service.plan', 'user'))
                 ->when($status !== 'semua', fn ($q) => $q->where('status', $status))
-                ->when($kategori, fn ($q, PlanKategori $k) => $q->whereHas('service.plan', fn ($p) => $p->where('kategori', $k)))
                 ->latest()->limit(200)->get()
-                ->map(fn (Invoice $i) => [...Tampil::tagihan($i), 'pelanggan' => $i->user->name, 'email' => $i->user->email, 'crm' => $this->crm($i)]),
+                ->map(fn (Invoice $i) => [...Tampil::tagihan($i), 'pelanggan' => $i->user->name, 'email' => $i->user->email, 'crm' => $this->crm($i),
+                    'midtrans_mode' => $i->metode === 'midtrans' ? TagihanCrm::mode($i) : null]),
         ]);
     }
 
-    /** Kartu ringkasan (ikut filter jenis, tidak ikut filter status). Nominal = jumlah + kode unik, sama dengan kolom Jumlah. */
-    private function ringkasan(?PlanKategori $kategori): array
+    /** Kartu ringkasan (ikut filter jenis & metode, tidak ikut filter status). Nominal = jumlah + kode unik, sama dengan kolom Jumlah. */
+    private function ringkasan(\Closure $saring): array
     {
-        $q = fn () => Invoice::query()->where('status', '!=', InvoiceStatus::Dibatalkan)
-            ->when($kategori, fn ($q, PlanKategori $k) => $q->whereHas('service.plan', fn ($p) => $p->where('kategori', $k)));
+        $q = fn () => $saring(Invoice::query()->where('status', '!=', InvoiceStatus::Dibatalkan));
         $hitung = fn ($b) => ['nominal' => (int) (clone $b)->sum(DB::raw('jumlah + coalesce(kode_unik, 0)')), 'jumlah' => $b->count()];
         $lunas = fn () => $q()->where('status', InvoiceStatus::Lunas);
         $bulan = now()->startOfMonth();

@@ -44,9 +44,12 @@ const props = defineProps<{
     status: string;
     jenis: string;
     pilihanJenis: { value: string; label: string }[];
+    metode: string;
+    pilihanMetode: { value: string; label: string }[];
     tagihan: (Tagihan & {
         pelanggan: string;
         email: string;
+        midtrans_mode: "sandbox" | "production" | null;
         // null = tidak dikirim ke CRM (bukan lunas Midtrans / domain)
         crm: {
             terkirim: boolean;
@@ -106,6 +109,12 @@ const pilihanStatus = [
                     param="jenis"
                     judul="Jenis produk"
                 />
+                <FilterStatus
+                    :nilai="metode"
+                    :pilihan="pilihanMetode"
+                    param="metode"
+                    judul="Metode"
+                />
                 <FilterStatus :nilai="status" :pilihan="pilihanStatus" />
             </div>
         </PageHeader>
@@ -158,7 +167,21 @@ const pilihanStatus = [
                             >{{ tanggal(t.dibayar_pada.slice(0, 10)) }}
                             <span class="block text-xs text-muted-foreground"
                                 >{{ t.dibayar_pada.slice(11, 16) }} ·
-                                {{ t.metode }}</span
+                                {{ t.metode }}
+                                <span
+                                    v-if="t.midtrans_mode"
+                                    :class="
+                                        t.midtrans_mode === 'sandbox'
+                                            ? 'font-semibold text-amber-600'
+                                            : 'text-emerald-700'
+                                    "
+                                    >·
+                                    {{
+                                        t.midtrans_mode === "sandbox"
+                                            ? "Sandbox"
+                                            : "Production"
+                                    }}</span
+                                ></span
                             ></template
                         >
                         <template v-else>-</template>

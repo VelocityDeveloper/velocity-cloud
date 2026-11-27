@@ -345,6 +345,18 @@ class CloudTest extends TestCase
         $this->assertSame(['nominal' => 1, 'jumlah' => 1], $r['dibayar_hari']);
         $this->assertSame(['nominal' => 1, 'jumlah' => 1], $r['dibayar_bulan']);
         $this->assertSame(1, $this->actingAs($admin)->get('/admin/tagihan?jenis=vps')->viewData('page')['props']['ringkasan']['tagihan']['jumlah']);
+
+        // filter metode: daftar + ringkasan; nilai tak dikenal = semua
+        $app2->update(['metode' => 'midtrans']);
+        $this->assertSame([$app2->id], $ids('?metode=midtrans'));
+        $mode = fn () => collect($this->actingAs($admin)->get('/admin/tagihan?metode=midtrans')->viewData('page')['props']['tagihan'])->pluck('midtrans_mode')->all();
+        $app2->update(['midtrans' => ['mode' => 'sandbox']]);
+        $this->assertSame(['sandbox'], $mode());
+        $app2->update(['midtrans' => ['mode' => 'production']]);
+        $this->assertSame(['production'], $mode());
+        $this->assertSame([], $ids('?metode=qris'));
+        $this->assertCount(4, $ids('?metode=ngawur'));
+        $this->assertSame(['nominal' => 1, 'jumlah' => 1], $this->actingAs($admin)->get('/admin/tagihan?metode=midtrans')->viewData('page')['props']['ringkasan']['dibayar']);
     }
 
     public function test_pelanggan_melihat_status_dan_log_pod_miliknya(): void

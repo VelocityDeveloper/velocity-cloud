@@ -67,6 +67,7 @@ class Midtrans
         ]);
 
         $invoice->forceFill(['midtrans' => ['order' => $order, 'url' => $res['redirect_url'], 'total' => $invoice->total(),
+            'mode' => self::produksi() ? 'production' : 'sandbox', // dikirim ke CRM: hanya produksi yang dicatat
             'sampai' => now()->addHours(self::JAM_BERLAKU)->toIso8601String()]])->save();
 
         return $res['redirect_url'];

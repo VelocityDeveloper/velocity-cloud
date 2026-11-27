@@ -7,7 +7,9 @@ use App\Enums\InvoiceStatus;
 use App\Enums\PlanKategori;
 use App\Http\Controllers\Controller;
 use App\Http\Presenters\Tampil;
+use App\Jobs\KirimTagihanCrm;
 use App\Models\Invoice;
+use App\Services\Crm\TagihanCrm;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -28,11 +30,11 @@ class TagihanController extends Controller
             'status' => $status,
             'jenis' => $jenis,
             'pilihanJenis' => array_map(fn (PlanKategori $k) => ['value' => $k->value, 'label' => $k->label()], PlanKategori::cases()),
-            'tagihan' => Invoice::with('service', 'user')
+            'tagihan' => Invoice::with('service.plan', 'user')
                 ->when($status !== 'semua', fn ($q) => $q->where('status', $status))
                 ->when($kategori, fn ($q, PlanKategori $k) => $q->whereHas('service.plan', fn ($p) => $p->where('kategori', $k)))
                 ->latest()->limit(200)->get()
-                ->map(fn (Invoice $i) => [...Tampil::tagihan($i), 'pelanggan' => $i->user->name, 'email' => $i->user->email]),
+                ->map(fn (Invoice $i) => [...Tampil::tagihan($i), 'pelanggan' => $i->user->name, 'email' => $i->user->email, 'crm' => $this->crm($i)]),
         ]);
     }
 
@@ -55,6 +57,33 @@ class TagihanController extends Controller
             'dibayar_hari' => $hitung($lunas()->where('dibayar_pada', '>=', $hari)),
             'tagihan_hari' => $hitung($q()->where('created_at', '>=', $hari)),
         ];
+    }
+
+    /** Status pencatatan di CRM (billing + bank midtrans_vd); null = tagihan ini tidak dikirim ke CRM. */
+    private function crm(Invoice $i): ?array
+    {
+        if (! TagihanCrm::perluDikirim($i)) {
+            return null;
+        }
+
+        return [
+            'terkirim' => (bool) $i->crm_bank_id,
+            'billing_id' => $i->crm_billing_id,
+            'bank_id' => $i->crm_bank_id,
+            'pada' => $i->crm_terkirim_pada?->toDateTimeString(),
+            'galat' => $i->crm_galat,
+        ];
+    }
+
+    /** Kirim (ulang) ke CRM; CRM idempoten lewat nomor tagihan, jadi tidak membuat billing/bank dobel. */
+    public function kirimCrm(Invoice $invoice): RedirectResponse
+    {
+        abort_unless(TagihanCrm::perluDikirim($invoice) && ! $invoice->crm_bank_id, 422);
+        $invoice->forceFill(['crm_galat' => null])->save();
+        KirimTagihanCrm::dispatch($invoice);
+        Inertia::flash('toast', ['type' => 'success', 'message' => $invoice->nomor.' diantrekan ke CRM.']);
+
+        return back();
     }
 
     public function lunas(Request $request, Invoice $invoice, TandaiLunas $tandai): RedirectResponse

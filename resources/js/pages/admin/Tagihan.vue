@@ -1,13 +1,13 @@
 <script setup lang="ts">
-import { Form, Head } from '@inertiajs/vue3';
-import { computed, ref } from 'vue';
-import TagihanController from '@/actions/App/Http/Controllers/Admin/TagihanController';
-import DataTable from '@/components/cloud/DataTable.vue';
-import FilterStatus from '@/components/cloud/FilterStatus.vue';
-import PageHeader from '@/components/cloud/PageHeader.vue';
-import StatusBadge from '@/components/cloud/StatusBadge.vue';
-import InputError from '@/components/InputError.vue';
-import { Button } from '@/components/ui/button';
+import { Form, Head } from "@inertiajs/vue3";
+import { computed, ref } from "vue";
+import TagihanController from "@/actions/App/Http/Controllers/Admin/TagihanController";
+import DataTable from "@/components/cloud/DataTable.vue";
+import FilterStatus from "@/components/cloud/FilterStatus.vue";
+import PageHeader from "@/components/cloud/PageHeader.vue";
+import StatusBadge from "@/components/cloud/StatusBadge.vue";
+import InputError from "@/components/InputError.vue";
+import { Button } from "@/components/ui/button";
 import {
     Dialog,
     DialogContent,
@@ -15,36 +15,47 @@ import {
     DialogFooter,
     DialogHeader,
     DialogTitle,
-} from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { rupiah, tanggal } from '@/lib/format';
-import admin from '@/routes/admin';
-import type { Tagihan } from '@/types';
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { rupiah, tanggal } from "@/lib/format";
+import admin from "@/routes/admin";
+import type { Tagihan } from "@/types";
 
 defineOptions({
     layout: {
         breadcrumbs: [
-            { title: 'Admin · Tagihan', href: admin.tagihan.index() },
+            { title: "Admin · Tagihan", href: admin.tagihan.index() },
         ],
     },
 });
 type Angka = { nominal: number; jumlah: number };
 const props = defineProps<{
     ringkasan: Record<
-        | 'tagihan'
-        | 'belum_dibayar'
-        | 'dibayar'
-        | 'dibayar_bulan'
-        | 'tagihan_bulan'
-        | 'dibayar_hari'
-        | 'tagihan_hari',
+        | "tagihan"
+        | "belum_dibayar"
+        | "dibayar"
+        | "dibayar_bulan"
+        | "tagihan_bulan"
+        | "dibayar_hari"
+        | "tagihan_hari",
         Angka
     >;
     status: string;
     jenis: string;
     pilihanJenis: { value: string; label: string }[];
-    tagihan: (Tagihan & { pelanggan: string; email: string })[];
+    tagihan: (Tagihan & {
+        pelanggan: string;
+        email: string;
+        // null = tidak dikirim ke CRM (bukan lunas Midtrans / domain)
+        crm: {
+            terkirim: boolean;
+            billing_id: number | null;
+            bank_id: number | null;
+            pada: string | null;
+            galat: string | null;
+        } | null;
+    })[];
 }>();
 
 // Kartu ringkasan: angka besar = nominal, baris kecil = keterangan.
@@ -52,22 +63,22 @@ const kartu = computed(() => {
     const r = props.ringkasan;
     return [
         {
-            judul: 'Total tagihan',
+            judul: "Total tagihan",
             nilai: r.tagihan.nominal,
             ket: `${r.tagihan.jumlah} tagihan · ${rupiah(r.belum_dibayar.nominal)} belum dibayar`,
         },
         {
-            judul: 'Total dibayar',
+            judul: "Total dibayar",
             nilai: r.dibayar.nominal,
             ket: `${r.dibayar.jumlah} tagihan lunas`,
         },
         {
-            judul: 'Dibayar bulan ini',
+            judul: "Dibayar bulan ini",
             nilai: r.dibayar_bulan.nominal,
             ket: `${r.dibayar_bulan.jumlah} lunas · tagihan baru ${rupiah(r.tagihan_bulan.nominal)}`,
         },
         {
-            judul: 'Dibayar hari ini',
+            judul: "Dibayar hari ini",
             nilai: r.dibayar_hari.nominal,
             ket: `${r.dibayar_hari.jumlah} lunas · tagihan baru ${rupiah(r.tagihan_hari.nominal)}`,
         },
@@ -75,9 +86,9 @@ const kartu = computed(() => {
 });
 const dipilih = ref<(Tagihan & { pelanggan: string }) | null>(null);
 const pilihanStatus = [
-    { value: 'belum_dibayar', label: 'Belum dibayar' },
-    { value: 'lunas', label: 'Lunas' },
-    { value: 'dibatalkan', label: 'Dibatalkan' },
+    { value: "belum_dibayar", label: "Belum dibayar" },
+    { value: "lunas", label: "Lunas" },
+    { value: "dibatalkan", label: "Dibatalkan" },
 ];
 </script>
 
@@ -157,6 +168,29 @@ const pilihanStatus = [
                             :status="t.status"
                             :label="t.status_label"
                         />
+                        <span
+                            v-if="t.crm"
+                            class="mt-1 block text-xs"
+                            :class="
+                                t.crm.terkirim
+                                    ? 'text-muted-foreground'
+                                    : t.crm.galat
+                                      ? 'text-destructive'
+                                      : 'text-amber-600'
+                            "
+                            :title="
+                                t.crm.terkirim
+                                    ? `Billing #${t.crm.billing_id} · Bank #${t.crm.bank_id} · ${t.crm.pada}`
+                                    : (t.crm.galat ?? '')
+                            "
+                            >{{
+                                t.crm.terkirim
+                                    ? "Terkirim CRM"
+                                    : t.crm.galat
+                                      ? "Gagal kirim CRM"
+                                      : "Belum ke CRM"
+                            }}</span
+                        >
                     </td>
                     <td class="text-right font-semibold text-ink">
                         {{ rupiah(t.total) }}
@@ -169,6 +203,21 @@ const pilihanStatus = [
                             @click="dipilih = t"
                             >Tandai lunas</Button
                         >
+                        <Form
+                            v-else-if="t.crm && !t.crm.terkirim"
+                            v-bind="TagihanController.kirimCrm.form(t.id)"
+                            v-slot="{ processing }"
+                        >
+                            <Button
+                                type="submit"
+                                size="sm"
+                                variant="outline"
+                                :disabled="processing"
+                                >{{
+                                    t.crm.galat ? "Kirim ulang" : "Kirim ke CRM"
+                                }}</Button
+                            >
+                        </Form>
                     </td>
                 </tr>
             </tbody>

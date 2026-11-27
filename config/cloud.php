@@ -134,6 +134,10 @@ return [
         'url' => env('CRM_API_URL', 'http://127.0.0.1:8174/api/api/public'),
         'key' => env('CRM_API_KEY'),
         'sumber' => 'app.velocitydatacenter.com', // dicatat di order CRM bersama nomor tagihan (kunci idempoten)
+        // tagihan lunas Midtrans → billing + bank midtrans_vd CRM (KirimTagihanCrm); nyalakan setelah endpoint vdc-tagihan CRM live
+        'kirim_tagihan' => (bool) env('CRM_KIRIM_TAGIHAN', false),
+        // Midtrans VDC pindah ke produksi (Admin › Pembayaran, 23-11-2026 11:12); tagihan lunas sebelumnya = sandbox, tidak dikirim
+        'midtrans_produksi_sejak' => env('MIDTRANS_PRODUKSI_SEJAK', '2026-11-23 11:12:19'),
         // kelola domain milik customer (nameserver dsb.): API panel customer-vdnet CRM, header vdnet-key = CUSTOMER_VDNET_KEY CRM
         'customer_url' => env('CRM_CUSTOMER_URL', 'http://127.0.0.1:8174/api/api/customer-vdnet'),
         'customer_key' => env('CRM_CUSTOMER_KEY'),

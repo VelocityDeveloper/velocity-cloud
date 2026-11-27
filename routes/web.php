@@ -76,6 +76,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('tiket', [Admin\TiketController::class, 'index'])->name('tiket.index');
         Route::get('email', [Admin\EmailController::class, 'index'])->name('email.index');
         Route::post('tagihan/{invoice}/lunas', [Admin\TagihanController::class, 'lunas'])->name('tagihan.lunas');
+        Route::post('tagihan/{invoice}/crm', [Admin\TagihanController::class, 'kirimCrm'])->middleware('throttle:20,1')->name('tagihan.crm');
         Route::get('layanan', [Admin\LayananController::class, 'index'])->name('layanan.index');
         Route::put('layanan/{service}', [Admin\LayananController::class, 'update'])->name('layanan.update');
         Route::post('layanan/{service}/ulangi', [Admin\LayananController::class, 'ulangi'])->name('layanan.ulangi');

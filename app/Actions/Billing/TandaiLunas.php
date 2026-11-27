@@ -6,6 +6,7 @@ use App\Enums\InvoiceStatus;
 use App\Enums\PlanKategori;
 use App\Enums\ServiceStatus;
 use App\Jobs\KirimDomainCrm;
+use App\Jobs\KirimTagihanCrm;
 use App\Jobs\PodAction;
 use App\Jobs\ProvisionHosting;
 use App\Jobs\ProvisionPod;
@@ -18,6 +19,7 @@ use App\Models\SaldoMutasi;
 use App\Models\User;
 use App\Models\Service;
 use App\Notifications\Pemberitahuan;
+use App\Services\Crm\TagihanCrm;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\DB;
@@ -96,6 +98,9 @@ class TandaiLunas
 
         if ($provision) {
             $provision::dispatch($invoice->service);
+        }
+        if (TagihanCrm::otomatis() && TagihanCrm::perluDikirim($invoice)) {
+            KirimTagihanCrm::dispatch($invoice)->afterCommit(); // billing + bank midtrans_vd di CRM
         }
     }
 
